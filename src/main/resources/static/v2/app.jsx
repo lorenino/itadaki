@@ -447,28 +447,51 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   };
 
   if (stage === 'loading') {
-    // Un seul loader unifie : vraie image uploadee floutee + anneau tournant + %
-    // central + barre de progression + etapes. Pas de placeholder Dish.
-    const captions = ['Upload de la photo…', 'On observe votre assiette…', 'On identifie les ingrédients…', 'On fait le calcul…'];
-    const steps = ['→ upload en cours…', '→ plat détecté', '→ ingrédients identifiés', '→ calories estimées'];
-    const idx = Math.min(3, Math.floor(prog / 25));
+    // Stepper "Qwen pense..." : 3 phases pedagogiques qui rendent le raisonnement IA visible
+    // Phase 1 (0-33%)  : observation -> scan line qui balaye l'image floutee
+    // Phase 2 (33-66%) : identification -> ingredients plausibles s'affichent un par un
+    // Phase 3 (66-100%): calcul -> chiffre kcal qui defile type slot machine
+    const phase = prog < 33 ? 0 : prog < 66 ? 1 : 2;
     const hasImg = img && img !== 'PLACEHOLDER';
+    const fakeIngredients = ['légumes verts', 'protéines animales', 'féculents', 'matières grasses', 'épices', 'sauce'];
+    const visibleIngredients = Math.min(fakeIngredients.length, Math.max(0, Math.floor((prog - 33) / 5)));
+    const fakeCalories = 180 + ((Math.floor(prog * 7) * 37) % 820);
+
+    const phases = [
+      { icon: '🧠', title: 'Qwen observe l\'image…', detail: 'Décodage visuel multimodal', color: T.accent },
+      { icon: '🔍', title: 'Identification des ingrédients…', detail: 'Segmentation et reconnaissance', color: '#7fa644' },
+      { icon: '🧮', title: 'Calcul des apports nutritionnels…', detail: 'Agrégation calories + macros', color: '#d4a13c' },
+    ];
+
     return (
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: T.bg, color: T.ink, textAlign: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
+        <style>{`
+          @keyframes scanline { 0%{top:0;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:100%;opacity:0} }
+          @keyframes fadein   { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes slotPulse{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1px)} }
+        `}</style>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+          {/* Image + anneau + scan line (phase 1) + % central */}
           <div style={{ position: 'relative', width: mobile ? 200 : 240, height: mobile ? 200 : 240 }}>
-            {hasImg
-              ? <img src={img} alt="repas en cours d'analyse" style={{
-                  position: 'absolute', inset: 14, borderRadius: '50%',
-                  width: 'calc(100% - 28px)', height: 'calc(100% - 28px)',
-                  objectFit: 'cover',
-                  filter: 'blur(3px) brightness(0.92)',
-                  transition: 'filter .6s ease',
-                }} />
-              : <Dish seed={13} style={{ position: 'absolute', inset: 14, borderRadius: '50%' }} />
-            }
+            <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', overflow: 'hidden' }}>
+              {hasImg
+                ? <img src={img} alt="repas en cours d'analyse" style={{
+                    width: '100%', height: '100%', objectFit: 'cover',
+                    filter: 'blur(3px) brightness(0.92)', transition: 'filter .6s ease',
+                  }} />
+                : <Dish seed={13} style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
+              }
+              {/* Scan line — visible en phase 1 uniquement */}
+              {phase === 0 && <div style={{
+                position: 'absolute', left: 0, right: 0, height: 4,
+                background: 'linear-gradient(90deg, transparent, ' + T.accent + ', transparent)',
+                boxShadow: '0 0 16px ' + T.accent,
+                animation: 'scanline 1.8s linear infinite',
+              }} />}
+            </div>
             <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ position: 'absolute', inset: 0, animation: 'spin 3s linear infinite' }}>
-              <circle cx="110" cy="110" r="104" fill="none" stroke={T.accent} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
+              <circle cx="110" cy="110" r="104" fill="none" stroke={phases[phase].color} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,.96)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.25)' }}>
@@ -476,18 +499,71 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
               </div>
             </div>
           </div>
-          <div style={{ width: mobile ? 280 : 360, background: T.bgAlt, borderRadius: 18, padding: 16, fontFamily: 'JetBrains Mono,monospace', fontSize: 12.5, color: T.inkMuted }}>
-            {steps.slice(0, Math.min(4, Math.ceil(prog / 25) + 1)).map((l, i) =>
-              <div key={i} style={{ padding: '2px 0', color: i <= idx ? T.ink : T.inkFaint }}>{l}</div>
-            )}
-            <div style={{ height: 4, background: T.hairline, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+
+          {/* Stepper 3 phases */}
+          <div style={{ width: mobile ? 300 : 380, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {phases.map((p, i) => {
+              const active = i === phase;
+              const done = i < phase;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12,
+                  padding: '10px 14px', borderRadius: 14,
+                  background: active ? T.bgAlt : 'transparent',
+                  border: active ? `1px solid ${p.color}30` : '1px solid transparent',
+                  opacity: done ? 0.55 : 1,
+                  transition: 'all .4s ease',
+                }}>
+                  <div style={{
+                    flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
+                    background: active ? p.color : (done ? T.matcha + '40' : T.hairline),
+                    color: active || done ? '#fff' : T.inkFaint,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 16, transition: 'background .3s',
+                  }}>{done ? '✓' : p.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <div style={{
+                      fontFamily: 'Inter,system-ui', fontSize: 13, fontWeight: 600,
+                      color: active ? T.ink : T.inkMuted,
+                    }}>{p.title}</div>
+                    <div style={{
+                      fontFamily: 'JetBrains Mono,monospace', fontSize: 10.5,
+                      color: T.inkFaint, marginTop: 2,
+                      textTransform: 'uppercase', letterSpacing: '.08em',
+                    }}>{p.detail}</div>
+
+                    {/* Détail dynamique selon phase active */}
+                    {active && i === 1 && visibleIngredients > 0 &&
+                      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {fakeIngredients.slice(0, visibleIngredients).map((ing, idx) =>
+                          <span key={idx} style={{
+                            fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
+                            background: p.color + '20', color: p.color, fontWeight: 500,
+                            animation: 'fadein .35s ease',
+                          }}>{ing}</span>
+                        )}
+                      </div>
+                    }
+                    {active && i === 2 &&
+                      <div style={{
+                        marginTop: 6, fontFamily: 'JetBrains Mono,monospace',
+                        fontSize: 18, fontWeight: 600, color: p.color,
+                        animation: 'slotPulse .3s ease-in-out infinite',
+                      }}>~ {fakeCalories} kcal</div>
+                    }
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ height: 4, background: T.hairline, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
               <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
             </div>
           </div>
         </div>
-        <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 20 : 24, letterSpacing: '-.02em', marginTop: 30, fontStyle: 'italic', fontWeight: 500 }}>{captions[idx]}</div>
-        <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12.5, color: T.inkFaint, marginTop: 8, maxWidth: 360, lineHeight: 1.5 }}>
-          Cela peut prendre quelques secondes. Vous pourrez ajuster les détails à l'étape suivante.
+
+        <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 18 : 22, letterSpacing: '-.02em', marginTop: 24, fontStyle: 'italic', fontWeight: 500, color: T.inkMuted }}>{phases[phase].title.replace(/…$/, '')}</div>
+        <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkFaint, marginTop: 6, maxWidth: 360, lineHeight: 1.5 }}>
+          Le modèle qwen2.5vl:7b raisonne localement — quelques secondes patience.
         </div>
       </div>
     );
