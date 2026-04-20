@@ -7,17 +7,16 @@ import java.util.List;
 
 /**
  * DTO for returning a meal correction record.
- * TODO: Map from MealCorrection entity via MealCorrectionMapper.
+ * TODO: Step 3 — populated via MealCorrectionMapper.toDto(MealCorrection).
+ *       correctedItems parsed from MealCorrection.correctedItemsJson via ObjectMapper in CorrectionServiceImpl.
  */
 public record MealCorrectionResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,
+        String correctedDishName,
         List<CorrectedFoodItemDto> correctedItems,
-        Double correctedCalories,
-        Double correctedProtein,
-        Double correctedCarbs,
-        Double correctedFat,
-        String note,
+        Double correctedTotalCalories,
+        String userComment,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) String correctedAt
 ) implements Serializable {
 }

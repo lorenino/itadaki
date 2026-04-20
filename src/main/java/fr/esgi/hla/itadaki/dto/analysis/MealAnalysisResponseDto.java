@@ -7,18 +7,17 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * DTO for returning the full AI analysis result of a meal.
- * TODO: Map from MealAnalysis entity via MealAnalysisMapper.
- * TODO: detectedItems parsed from rawAiResponse by OllamaService.
+ * DTO for returning the AI analysis result of a meal.
+ * TODO: Step 3 — populated via MealAnalysisMapper.toDto(MealAnalysis).
+ *       detectedItems parsed from MealAnalysis.detectedItemsJson via ObjectMapper in AnalysisServiceImpl.
  */
 public record MealAnalysisResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,
+        String detectedDishName,
         List<DetectedFoodItemDto> detectedItems,
-        Double totalCalories,
-        Double totalProtein,
-        Double totalCarbs,
-        Double totalFat,
+        Double estimatedTotalCalories,
+        Double confidenceScore,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) String analyzedAt
 ) implements Serializable {
 }

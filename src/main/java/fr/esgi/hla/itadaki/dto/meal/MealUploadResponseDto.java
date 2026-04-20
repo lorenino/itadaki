@@ -6,13 +6,13 @@ import java.io.Serializable;
 
 /**
  * Lightweight DTO returned immediately after a meal image is uploaded.
- * Contains just enough for the client to poll for analysis status.
- * TODO: Map from Meal + MealPhoto entities via MealMapper.
+ * Contains just enough for the client to know the meal and photo IDs and poll for analysis status.
+ * TODO: Step 3 — populated via MealMapper.toUploadResponseDto(Meal).
  */
 public record MealUploadResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long photoId,
         String status,
-        String message
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) String uploadedAt
 ) implements Serializable {
 }
