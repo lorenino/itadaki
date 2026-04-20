@@ -20,6 +20,7 @@ public final class SecurityConstants {
             "/favicon.ico",
             "/css/**",
             "/js/**",
-            "/v2/**"
+            "/v2/**",
+            "/uploads/**"
     };
 }

@@ -59,8 +59,13 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     @Override
     public String getFileUrl(String filePath) {
-        // Build public URL from base URL and relative path
-        return baseUrl + "/" + filePath;
+        // Construit une URL relative (servie par ResourceHandler /uploads/**).
+        // filePath peut etre "./uploads/uuid.jpg" ou "uploads/uuid.jpg" -- on
+        // extrait juste le nom de fichier pour eviter le "./".
+        if (filePath == null) return null;
+        int slash = filePath.lastIndexOf('/');
+        String name = slash >= 0 ? filePath.substring(slash + 1) : filePath;
+        return "/uploads/" + name;
     }
 
     private String getFileExtension(String filename) {

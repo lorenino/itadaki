@@ -414,46 +414,46 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   };
 
   if (stage === 'loading') {
-    const variants = [
-      <div key="v1" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
-        <div style={{ position: 'relative', width: mobile ? 180 : 220, height: mobile ? 180 : 220 }}>
-          {img && img !== 'PLACEHOLDER'
-            ? <img src={img} style={{ position: 'absolute', inset: 14, borderRadius: '50%', width: 'calc(100% - 28px)', height: 'calc(100% - 28px)', objectFit: 'cover' }} />
-            : <Dish seed={13} style={{ position: 'absolute', inset: 14, borderRadius: '50%' }} />}
-          <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ position: 'absolute', inset: 0, animation: 'spin 3s linear infinite' }}>
-            <circle cx="110" cy="110" r="104" fill="none" stroke={T.accent} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>
-              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 13, color: '#222', fontWeight: 600 }}>{Math.round(prog)}%</div>
+    // Un seul loader unifie : vraie image uploadee floutee + anneau tournant + %
+    // central + barre de progression + etapes. Pas de placeholder Dish.
+    const captions = ['Upload de la photo…', 'On observe votre assiette…', 'On identifie les ingrédients…', 'On fait le calcul…'];
+    const steps = ['→ upload en cours…', '→ plat détecté', '→ ingrédients identifiés', '→ calories estimées'];
+    const idx = Math.min(3, Math.floor(prog / 25));
+    const hasImg = img && img !== 'PLACEHOLDER';
+    return (
+      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: T.bg, color: T.ink, textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
+          <div style={{ position: 'relative', width: mobile ? 200 : 240, height: mobile ? 200 : 240 }}>
+            {hasImg
+              ? <img src={img} alt="repas en cours d'analyse" style={{
+                  position: 'absolute', inset: 14, borderRadius: '50%',
+                  width: 'calc(100% - 28px)', height: 'calc(100% - 28px)',
+                  objectFit: 'cover',
+                  filter: 'blur(3px) brightness(0.92)',
+                  transition: 'filter .6s ease',
+                }} />
+              : <Dish seed={13} style={{ position: 'absolute', inset: 14, borderRadius: '50%' }} />
+            }
+            <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ position: 'absolute', inset: 0, animation: 'spin 3s linear infinite' }}>
+              <circle cx="110" cy="110" r="104" fill="none" stroke={T.accent} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,.96)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.25)' }}>
+                <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 15, color: T.ink, fontWeight: 600 }}>{Math.round(prog)}%</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: mobile ? 280 : 360, background: T.bgAlt, borderRadius: 18, padding: 16, fontFamily: 'JetBrains Mono,monospace', fontSize: 12.5, color: T.inkMuted }}>
+            {steps.slice(0, Math.min(4, Math.ceil(prog / 25) + 1)).map((l, i) =>
+              <div key={i} style={{ padding: '2px 0', color: i <= idx ? T.ink : T.inkFaint }}>{l}</div>
+            )}
+            <div style={{ height: 4, background: T.hairline, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
             </div>
           </div>
         </div>
-      </div>,
-      <div key="v2" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, width: '100%', maxWidth: 360 }}>
-        <Dish seed={13} style={{ width: 120, height: 120, borderRadius: '50%' }} />
-        <div style={{ width: '100%', background: T.bgAlt, borderRadius: 18, padding: 18, fontFamily: 'JetBrains Mono,monospace', fontSize: 13, color: T.inkMuted }}>
-          {['→ upload en cours…', '→ plat détecté', '→ ingrédients identifiés', '→ calories estimées'].slice(0, Math.min(4, Math.ceil(prog / 25))).map((l, i) => <div key={i} style={{ padding: '3px 0' }}>{l}</div>)}
-          <div style={{ height: 3, background: T.hairline, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}><div style={{ width: prog + '%', height: '100%', background: T.accent, transition: 'width .3s' }} /></div>
-        </div>
-      </div>,
-      <div key="v3" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, width: '100%', maxWidth: 360 }}>
-        <div style={{ position: 'relative', width: 160, height: 160 }}>
-          {[0, 1, 2, 3, 4].map(i => <div key={i} style={{ position: 'absolute', left: '50%', top: '50%', width: 10, height: 10, borderRadius: '50%', background: i % 2 ? T.accent : T.matcha, transform: 'translate(-50%,-50%) rotate(' + (i * 72) + 'deg) translateY(-60px)', animation: 'breathe 1.' + (4 + i) + 's ease-in-out infinite', animationDelay: (i * 0.1) + 's' }} />)}
-          <div style={{ position: 'absolute', inset: 30 }}><Dish seed={13} style={{ width: '100%', height: '100%', borderRadius: '50%' }} /></div>
-        </div>
-        <div style={{ width: '100%', height: 6, background: T.hairline, borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', borderRadius: 3, transition: 'width .3s' }} />
-        </div>
-      </div>,
-    ];
-    const captions = ['Upload de la photo…', 'On observe votre assiette…', 'On identifie les ingrédients…', 'On fait le calcul…'];
-    const idx = Math.min(3, Math.floor(prog / 25));
-    return (
-      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: T.bg, color: T.ink, textAlign: 'center' }}>
-        {variants[loadVar]}
         <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 20 : 24, letterSpacing: '-.02em', marginTop: 30, fontStyle: 'italic', fontWeight: 500 }}>{captions[idx]}</div>
-        <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12.5, color: T.inkFaint, marginTop: 8, maxWidth: 340, lineHeight: 1.5 }}>
+        <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12.5, color: T.inkFaint, marginTop: 8, maxWidth: 360, lineHeight: 1.5 }}>
           Cela peut prendre quelques secondes. Vous pourrez ajuster les détails à l'étape suivante.
         </div>
       </div>
@@ -600,10 +600,12 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '240px 1fr', gap: 20, alignItems: 'start' }}>
         <div>
-          {displayMeal.img && displayMeal.img !== 'PLACEHOLDER'
-            ? <img src={displayMeal.img} style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 24, boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} />
-            : <Dish seed={displayMeal.seed} style={{ width: '100%', aspectRatio: '1/1', boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} rounded={24} />
-          }
+          {(() => {
+            const photo = (displayMeal.img && displayMeal.img !== 'PLACEHOLDER') ? displayMeal.img : displayMeal.photoUrl;
+            return photo
+              ? <img src={photo} alt="repas analysé" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 24, boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} />
+              : <Dish seed={displayMeal.seed} style={{ width: '100%', aspectRatio: '1/1', boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} rounded={24} />;
+          })()}
           <div style={{ marginTop: 14, padding: 14, background: T.accentSoft, borderRadius: 16 }}>
             <Confidence value={displayMeal.conf} T={T} />
             <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.accentDeep, marginTop: 10, lineHeight: 1.5 }}>
@@ -867,11 +869,12 @@ function App() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
       background: T.pageBg,
       color: T.ink,
       fontFamily: 'Inter, -apple-system, system-ui, sans-serif',
       WebkitFontSmoothing: 'antialiased',
+      overflow: 'hidden',
     }}>
       {content}
     </div>

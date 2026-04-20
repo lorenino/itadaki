@@ -166,8 +166,13 @@ function MealRow({m,T,onClick,compact}){
   const d=new Date(m.date);
   const t=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   const mid=Math.round((m.kMin+m.kMax)/2);
+  const photo=m.img||m.photoUrl;
+  const [imgFailed,setImgFailed]=useState(false);
   return <button onClick={onClick} style={{padding:'9px 10px',display:'flex',alignItems:'center',gap:10,background:T.surface,border:`1px solid ${T.hairline}`,borderRadius:16,cursor:'pointer',textAlign:'left',width:'100%'}}>
-    <Dish seed={m.seed} style={{width:46,height:46,flexShrink:0}} rounded={12}/>
+    {photo && !imgFailed
+      ? <img src={photo} alt="" onError={()=>setImgFailed(true)} style={{width:46,height:46,flexShrink:0,borderRadius:12,objectFit:'cover'}}/>
+      : <Dish seed={m.seed} style={{width:46,height:46,flexShrink:0}} rounded={12}/>
+    }
     <div style={{flex:1,minWidth:0}}>
       <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.ink,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.name}</div>
       <div style={{fontFamily:'Inter,system-ui',fontSize:11,color:T.inkFaint,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.meal} · {t}</div>
