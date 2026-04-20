@@ -15,7 +15,9 @@ import java.util.Set;
 public class ImageFileValidator implements ConstraintValidator<ValidImageFile, MultipartFile> {
 
     private static final Set<String> ALLOWED_TYPES = new HashSet<>();
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    // Aligne sur spring.servlet.multipart.max-file-size (30MB).
+    // Photos smartphone modernes (12-48MP) depassent souvent 10MB.
+    private static final long MAX_FILE_SIZE = 30L * 1024 * 1024;
 
     static {
         ALLOWED_TYPES.add("image/jpeg");
@@ -55,7 +57,7 @@ public class ImageFileValidator implements ConstraintValidator<ValidImageFile, M
         // Check file size
         if (file.getSize() > MAX_FILE_SIZE) {
             context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate("File size exceeds maximum limit of 10MB")
+            context.buildConstraintViolationWithTemplate("File size exceeds maximum limit of 30MB")
                     .addConstraintViolation();
             return false;
         }

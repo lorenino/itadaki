@@ -295,6 +295,27 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
     onUpload={onUpload} onHistory={onHistory} onMeal={onMeal} mobile={mobile} />;
 }
 
+// ─── Helpers upload ──────────────────────────────────────────────────────────
+// Redimensionne + compresse en JPEG pour reduire le payload multipart et
+// la latence tunnel ngrok (photos smartphone modernes = 15-30 Mo, Qwen2.5-VL
+// accepte 1280px large). Garde l'extension .jpg pour que ValidImageFile passe.
+async function resizeForUpload(file, maxSide = 1280, quality = 0.85) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  // Petites images : passe direct (< 2 Mo, pas d'agreg)
+  if (file.size < 2 * 1024 * 1024) return file;
+  const bitmap = await createImageBitmap(file);
+  const ratio = Math.min(maxSide / bitmap.width, maxSide / bitmap.height, 1);
+  const w = Math.round(bitmap.width * ratio);
+  const h = Math.round(bitmap.height * ratio);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+  if (!blob) return file; // fallback
+  const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+  return new File([blob], newName, { type: 'image/jpeg' });
+}
+
 // ─── Upload câblé ─────────────────────────────────────────────────────────────
 function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   const [stage, setStage] = useState('idle');
@@ -319,8 +340,12 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     setProg(10);
     setApiErr('');
     try {
-      // Etape 1 — upload image
-      const uploadRes = await API.meals.upload(file);
+      // Etape 0 — resize + compress pour reduire le payload (photos smartphone 16-30Mo).
+      // Qwen2.5-VL accepte 1280px large largement. JPEG 0.85 => ~300-600Ko.
+      const compressed = await resizeForUpload(file);
+
+      // Etape 1 — upload image (compressee)
+      const uploadRes = await API.meals.upload(compressed);
       const mealId = uploadRes.mealId;
       setProg(30);
 
