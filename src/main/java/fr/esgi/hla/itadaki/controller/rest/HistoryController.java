@@ -25,7 +25,7 @@ import java.util.List;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/history")
+@RequestMapping("/api/history")
 @Tag(name = "History", description = "Meal history and date-based retrieval endpoints")
 public class HistoryController {
 

@@ -5,7 +5,6 @@ import fr.esgi.hla.itadaki.security.JwtAuthenticationEntryPoint;
 import fr.esgi.hla.itadaki.security.JwtAuthenticationFilter;
 import fr.esgi.hla.itadaki.security.SecurityConstants;
 import fr.esgi.hla.itadaki.service.JwtService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,12 +24,19 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  */
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtService jwtService;
+
+    public SecurityConfig(CustomUserDetailsService userDetailsService,
+                          JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
+                          JwtService jwtService) {
+        this.userDetailsService = userDetailsService;
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.jwtService = jwtService;
+    }
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {

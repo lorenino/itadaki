@@ -6,6 +6,7 @@ import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.HistoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class HistoryServiceImpl implements HistoryService {
 
     private final MealRepository mealRepository;

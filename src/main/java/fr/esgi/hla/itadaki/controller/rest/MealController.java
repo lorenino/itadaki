@@ -26,7 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/meals")
+@RequestMapping("/api/meals")
 @Tag(name = "Meals", description = "Meal upload and retrieval endpoints")
 public class MealController {
 

@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/users")
+@RequestMapping("/api/users")
 @Tag(name = "Users", description = "User profile endpoints")
 public class UserController {
 

@@ -14,6 +14,7 @@ import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.CorrectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class CorrectionServiceImpl implements CorrectionService {
 
     private final MealRepository mealRepository;

@@ -8,6 +8,7 @@ import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.StatsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class StatsServiceImpl implements StatsService {
 
     private final MealAnalysisRepository mealAnalysisRepository;

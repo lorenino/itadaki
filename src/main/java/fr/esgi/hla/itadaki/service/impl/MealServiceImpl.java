@@ -13,6 +13,7 @@ import fr.esgi.hla.itadaki.service.MealPhotoService;
 import fr.esgi.hla.itadaki.service.MealService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -21,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class MealServiceImpl implements MealService {
 
     private final MealRepository mealRepository;

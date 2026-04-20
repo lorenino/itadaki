@@ -18,9 +18,6 @@ import org.springframework.stereotype.Service;
 /**
  * Implementation of AuthService.
  * Handles user registration and login with JWT token generation.
- *
- * STEP 3: Basic auth service with password encoding.
- * STEP 4: Full JWT integration with Spring Security configuration.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,31 +47,25 @@ public class AuthServiceImpl implements AuthService {
 
         user = userRepository.save(user);
 
-        // Generate JWT token
-        // TODO STEP 4: Create UserDetails from user and call jwtService.generateToken()
         String token = generateTokenForUser(user);
 
         return new AuthResponseDto(
                 token,
                 "Bearer",
-                86_400_000L, // 24 hours in milliseconds
+                86_400_000L,
                 userMapper.toDto(user)
         );
     }
 
     @Override
     public AuthResponseDto login(LoginRequestDto request) {
-        // Find user by email
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
-        // Verify password
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        // Generate JWT token
-        // TODO STEP 4: Create UserDetails from user and call jwtService.generateToken()
         String token = generateTokenForUser(user);
 
         return new AuthResponseDto(
@@ -85,14 +76,7 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
-    /**
-     * Helper method to generate token for a user.
-     * TODO STEP 4: Replace with proper Spring Security UserDetails-based token generation.
-     */
     private String generateTokenForUser(User user) {
-        // STEP 3: Simple token generation structure
-        // In STEP 4, this will be integrated with Spring Security's UserDetails
-        // For now, we use a temporary user details wrapper
         return jwtService.generateToken(
                 org.springframework.security.core.userdetails.User.builder()
                         .username(user.getEmail())

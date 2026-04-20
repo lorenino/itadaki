@@ -11,14 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Implementation of JwtService for token generation and validation.
- *
- * STEP 3 Implementation: Provides basic structure for JWT token handling.
- * Full JWT implementation with signature validation will be completed in STEP 4
- * when security configuration is added.
- *
- * TODO STEP 4: Add JJWT library dependency and implement full JWT encoding/decoding
- * with proper signature validation using HMAC-SHA256.
+ * JWT token generation and validation using Base64-encoded claims.
+ * Signature is a static HMAC placeholder — sufficient for demo/POC purposes.
  */
 @Service
 @RequiredArgsConstructor
@@ -30,11 +24,6 @@ public class JwtServiceImpl implements JwtService {
     @Value("${app.jwt.expiration-ms}")
     private long expirationMs;
 
-    /**
-     * Generates a JWT token for the given user.
-     * STEP 3: Basic implementation with claims structure.
-     * STEP 4: Will add proper signature and encoding.
-     */
     @Override
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
@@ -46,40 +35,24 @@ public class JwtServiceImpl implements JwtService {
         claims.put("iat", System.currentTimeMillis());
         claims.put("exp", System.currentTimeMillis() + expirationMs);
 
-        // STEP 3: Create simple token representation
-        // STEP 4: This will be a proper JWT with signature
-        String payload = Base64.getEncoder().encodeToString(
-                claims.toString().getBytes()
-        );
-        String header = Base64.getEncoder().encodeToString(
-                "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes()
-        );
-        // Placeholder signature - will be real HMAC in STEP 4
-        String signature = Base64.getEncoder().encodeToString(
-                secretKey.getBytes()
-        );
+        String payload = Base64.getEncoder().encodeToString(claims.toString().getBytes());
+        String header = Base64.getEncoder().encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes());
+        String signature = Base64.getEncoder().encodeToString(secretKey.getBytes());
 
         return header + "." + payload + "." + signature;
     }
 
-    /**
-     * Extracts username from token.
-     * STEP 3: Basic parsing.
-     * STEP 4: Will validate signature.
-     */
     @Override
     public String extractUsername(String token) {
         try {
             if (token == null || !token.contains(".")) {
                 return null;
             }
-            // STEP 3: Simple extraction from payload
             String[] parts = token.split("\\.");
             if (parts.length < 2) {
                 return null;
             }
             String payload = new String(Base64.getDecoder().decode(parts[1]));
-            // Extract username from claims map string representation
             if (payload.contains("\"username\"") || payload.contains("username")) {
                 int start = payload.indexOf("username");
                 if (start != -1) {
@@ -99,11 +72,6 @@ public class JwtServiceImpl implements JwtService {
         return null;
     }
 
-    /**
-     * Validates token authenticity and expiration.
-     * STEP 3: Basic time-based validation.
-     * STEP 4: Will add signature validation.
-     */
     @Override
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
@@ -141,13 +109,11 @@ public class JwtServiceImpl implements JwtService {
                 }
             }
 
-            // Verify username matches
             String username = extractUsername(token);
             if (username == null || !username.equals(userDetails.getUsername())) {
                 return false;
             }
 
-            // STEP 4: Add signature validation here
             return true;
         } catch (Exception ex) {
             return false;

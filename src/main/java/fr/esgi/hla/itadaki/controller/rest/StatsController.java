@@ -22,7 +22,7 @@ import java.util.List;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/stats")
+@RequestMapping("/api/stats")
 @Tag(name = "Statistics", description = "Nutritional statistics endpoints")
 public class StatsController {
 

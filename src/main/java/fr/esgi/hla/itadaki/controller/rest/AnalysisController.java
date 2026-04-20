@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/analyses")
+@RequestMapping("/api/analyses")
 @Tag(name = "Analyses", description = "AI meal analysis endpoints")
 public class AnalysisController {
 

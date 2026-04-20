@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @AllArgsConstructor
-@RequestMapping("api/corrections")
+@RequestMapping("/api/corrections")
 @Tag(name = "Corrections", description = "Manual meal analysis correction endpoints")
 public class CorrectionController {
 

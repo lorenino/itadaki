@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.UUID;
+import java.nio.file.Paths;
 
 /**
  * Implementation of MealPhotoService.
@@ -41,7 +41,7 @@ public class MealPhotoServiceImpl implements MealPhotoService {
         MealPhoto photo = new MealPhoto();
         photo.setMeal(meal);
         photo.setOriginalFileName(file.getOriginalFilename());
-        photo.setFileName(UUID.randomUUID().toString() + getFileExtension(file.getOriginalFilename()));
+        photo.setFileName(Paths.get(storagePath).getFileName().toString());
         photo.setStoragePath(storagePath);
         photo.setContentType(file.getContentType());
         photo.setSize(file.getSize());
@@ -77,10 +77,4 @@ public class MealPhotoServiceImpl implements MealPhotoService {
         return photo.getStoragePath();
     }
 
-    private String getFileExtension(String filename) {
-        if (filename == null || !filename.contains(".")) {
-            return "";
-        }
-        return filename.substring(filename.lastIndexOf("."));
-    }
 }

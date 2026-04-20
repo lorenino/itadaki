@@ -114,7 +114,7 @@ async function uploadMeal() {
         currentMealId = uploadData.mealId;
 
         // 2. Trigger analysis
-        const analysisRes = await authFetch(`/api/analysis/${currentMealId}`, { method: 'POST' });
+        const analysisRes = await authFetch(`/api/analyses/${currentMealId}`, { method: 'POST' });
         if (!analysisRes.ok) {
             const d = await analysisRes.json();
             throw new Error(d.message || "Échec de l'analyse");
@@ -167,7 +167,7 @@ async function submitCorrection() {
     const comment = document.getElementById('correction-comment').value;
 
     try {
-        const res = await authFetch(`/api/correction/${currentMealId}`, {
+        const res = await authFetch(`/api/corrections/${currentMealId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
