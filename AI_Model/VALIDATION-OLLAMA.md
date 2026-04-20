@@ -196,6 +196,12 @@ winget install ngrok.ngrok
 ngrok config add-authtoken <TOKEN>
 ```
 
+### URL ngrok réservée (custom domain stable)
+
+**URL : `https://ducky-shrank-washer.ngrok-free.dev`**
+
+Hugo a réservé un custom domain sur son compte ngrok free tier → l'URL ne change plus entre sessions. On peut la hardcoder comme default dans `application.properties`. ✅
+
 ### Avant chaque démo (Hugo, 2 min)
 
 ```powershell
@@ -203,45 +209,53 @@ ngrok config add-authtoken <TOKEN>
 ollama run qwen2.5vl:7b "ok"
 # → tape /bye après réponse
 
-# 2. Lancer le tunnel dans un terminal DÉDIÉ (NE PAS FERMER)
-ngrok http 11434
-# → copie l'URL « Forwarding https://abcd-1234.ngrok-free.app -> http://localhost:11434 »
-# → partage l'URL sur le channel équipe
+# 2. Lancer le tunnel avec le domaine réservé (terminal DÉDIÉ, NE PAS FERMER)
+ngrok http --url=ducky-shrank-washer.ngrok-free.dev 11434
+# syntaxe alternative selon version ngrok :
+# ngrok http --domain=ducky-shrank-washer.ngrok-free.dev 11434
 ```
+
+Si l'URL répond `ERR_NGROK_3200 The endpoint is offline`, c'est que le tunnel n'est pas actif → Hugo doit relancer `ngrok http --url=... 11434`.
 
 ### Test de validation (Lorenzo ou Ahmed avant la démo)
 
 ```bash
 # Connectivité
-curl -H "ngrok-skip-browser-warning: any" https://abcd-1234.ngrok-free.app
+curl -H "ngrok-skip-browser-warning: any" https://ducky-shrank-washer.ngrok-free.dev
 # → "Ollama is running"
 
 # Liste modèles
-curl -H "ngrok-skip-browser-warning: any" https://abcd-1234.ngrok-free.app/api/tags
+curl -H "ngrok-skip-browser-warning: any" https://ducky-shrank-washer.ngrok-free.dev/api/tags
 # → {"models":[{"name":"qwen2.5vl:7b",…},{"name":"gemma3:4b",…}]}
 
 # Appel chat complet
 curl -H "ngrok-skip-browser-warning: any" -H "Content-Type: application/json" \
-  https://abcd-1234.ngrok-free.app/api/chat \
+  https://ducky-shrank-washer.ngrok-free.dev/api/chat \
   -d '{"model":"qwen2.5vl:7b","messages":[{"role":"user","content":"Retourne {\"ok\":true}"}],"stream":false,"format":"json"}'
 ```
 
 ### Lancement app Spring Boot (démonstrateur)
 
+Avec le custom domain stable, l'URL est déjà le default dans `application.properties` :
+```properties
+spring.ai.ollama.base-url=${OLLAMA_URL:https://ducky-shrank-washer.ngrok-free.dev}
+```
+
+Donc simplement :
 ```powershell
-$env:OLLAMA_URL = "https://abcd-1234.ngrok-free.app"
 mvn spring-boot:run
 ```
 
-L'`application.properties` doit contenir :
-```properties
-spring.ai.ollama.base-url=${OLLAMA_URL:http://localhost:11434}
+Si besoin d'override (ex. dev local chez Ahmed sans passer par le tunnel) :
+```powershell
+$env:OLLAMA_URL = "http://localhost:11434"
+mvn spring-boot:run
 ```
 
 ### ⚠ Gotchas ngrok à connaître
 
 - **Header obligatoire** : `ngrok-skip-browser-warning: any` sur toutes les requêtes, sinon ngrok renvoie une page HTML d'avertissement que Spring AI ne peut pas parser. Ahmed doit injecter ce header dans le `RestClient` / `WebClient` utilisé par `OllamaServiceImpl`.
-- **URL change à chaque `ngrok http`** sur le plan gratuit. Ne jamais hardcoder l'URL, toujours via env var `OLLAMA_URL`.
+- **URL stable** : Hugo a réservé le custom domain `ducky-shrank-washer.ngrok-free.dev` → OK à hardcoder comme default dans `application.properties`. Override via `OLLAMA_URL` si besoin.
 - **Session doit rester ouverte** : fermer le terminal ngrok coupe le tunnel → démo morte.
 - **Rate limit gratuit** : 40 req/min (largement OK pour démo).
 - **Latence tunnel** : ~200 ms additionnels par appel (acceptable, on reste sur 2-10 s au total).
