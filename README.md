@@ -1,189 +1,93 @@
-# 🚀 ITADAKI - Hackathon ESGI
+# ITADAKI
 
 Application de tracking nutritionnel avec IA (Ollama + Spring Boot).
 
 ---
 
-## ⚡ Démarrage Rapide
+## Lancement (une seule commande)
 
-### Commande Unique (RECOMMANDÉ)
-
-```bash
-make run
-```
-
-Cela lance un menu interactif avec 3 options :
-
-1. **TOUT EN LOCAL** - Ollama + Spring Boot (localhost:11434 + :8080)
-2. **APP SEULE** - Seulement Spring Boot (si Ollama déjà lancé ailleurs)
-3. **OLLAMA + NGROK SEULS** - Pour partager Ollama avec une autre machine
-
----
-
-## 📚 Installation Première Fois
-
-### Prérequis
-
-1. **Java 25+** (https://adoptium.net/temurin/ — Temurin JDK 25 ou 26 recommandé)
-2. **Maven 3.9+** (fourni via `./mvnw`, pas d'install globale requise)
-3. **GNU Make** (via Scoop : `scoop install make`)
-4. **Ollama** (https://ollama.com/download)
-5. **ngrok** (https://ngrok.com/download)
-
-### Installation Make (si absent)
+Ouvre un terminal PowerShell dans le dossier du projet, puis :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File automation/install-make.ps1
+.\run.bat
 ```
 
-### Étapes de configuration
+Le menu interactif s'ouvre automatiquement.
 
-1. **Installer Ollama**
-   ```bash
-   irm https://ollama.com/install.ps1 | iex
-   ```
-
-2. **Installer ngrok**
-   - Télécharger sur https://ngrok.com/download
-   - Extraire dans `C:\ngrok`
-
-3. **Télécharger le modèle IA**
-   ```bash
-   make run
-   # Choix : 4 (Télécharger modèle)
-   ```
-
-4. **Lancer l'app**
-   ```bash
-   make run
-   # Choix : 1 (Tout en local) ou 2 (App seule) ou 3 (Ollama+ngrok)
-   ```
+> Si PowerShell bloque l'execution, utilise :
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\automation\menu.ps1
+> ```
 
 ---
 
-## 🗂️ Structure du Projet
+## Prerequis
 
-```
-itadaki/
-├── src/                    # Code source
-│   ├── main/java/         # Classes Java
-│   └── main/resources/     # application.properties
-├── automation/            # Scripts d'automatisation
-│   ├── itadaki-setup.ps1  # Menu interactif PowerShell
-│   └── README.md
-├── AI_Model/              # Documentation IA
-│   ├── setup-model.md     # Guide d'installation complet
-│   ├── VALIDATION-OLLAMA.md
-│   └── APPLICATION-PROPERTIES.md
-├── Makefile               # Commandes Make
-└── pom.xml                # Configuration Maven
-```
+| Outil  | Version | Lien                                                  |
+|--------|---------|-------------------------------------------------------|
+| Java   | 21+     | https://www.oracle.com/java/technologies/downloads/   |
+| Ollama | latest  | https://ollama.com/download                           |
+| ngrok  | latest  | https://ngrok.com/download/windows                    |
+
+Maven n'est pas requis — le projet inclut `mvnw.cmd` qui le telecharge automatiquement.
 
 ---
 
-## 🔧 Configuration
+## Installation de ngrok (a faire une seule fois)
 
-### application.properties
+### 1. Installer ngrok
 
-Les propriétés Ollama sont automatiquement mises à jour :
+Le script propose de l'installer automatiquement au premier lancement (telechargement + extraction).
 
-```properties
-# Développement local
-spring.ai.ollama.base-url=http://localhost:11434
-
-# Ou avec ngrok
-spring.ai.ollama.base-url=https://xxxx-yyyy-zzzz.ngrok-free.app
+**Ou manuellement via PowerShell :**
+```powershell
+Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile "$env:TEMP\ngrok.zip" -UseBasicParsing
+Expand-Archive "$env:TEMP\ngrok.zip" -DestinationPath "C:\ngrok" -Force
 ```
 
-### Autres propriétés
+### 2. Creer un compte et recuperer ton token
 
-- Port Spring Boot : `8080`
-- Port Ollama : `11434`
-- Base de données : H2 (fichier `./data/itadaki`)
-- Upload de photos : `./uploads`
+Va sur : https://dashboard.ngrok.com/get-started/your-authtoken
 
----
+Connecte-toi (ou cree un compte gratuit), copie ton authtoken.
 
-## 🚀 API Endpoints
+### 3. Configurer le token (une seule fois)
 
-### Auth (public)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/api/auth/register` | Inscription (retourne JWT + user) |
-| POST | `/api/auth/login` | Connexion (retourne JWT + user) |
+```powershell
+C:\ngrok\ngrok.exe config add-authtoken TON_TOKEN_ICI
+```
 
-### Meals, Analyses, History (JWT Bearer requis)
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/api/meals` | Upload photo (multipart `image`) — max 30 Mo |
-| GET | `/api/meals/{id}` | Détail d'un meal |
-| DELETE | `/api/meals/{id}` | Supprimer (own uniquement) |
-| POST | `/api/analyses/{mealId}` | Déclencher analyse Ollama (body vide) |
-| POST | `/api/analyses/{mealId}` | 2ᵉ passe LLM (body `{"hint":"..."}`) |
-| GET | `/api/analyses/{mealId}` | Récupérer l'analyse |
-| GET | `/api/history?page=0&size=20` | Historique paginé |
-| GET | `/api/history/date/{YYYY-MM-DD}` | Meals d'une date |
-| GET | `/api/stats/overview` | Stats globales utilisateur |
-| GET | `/api/stats/daily?from=&to=` | Calories par jour |
-| POST | `/api/corrections/{mealId}` | Correction manuelle (bonus, optionnel) |
-| GET | `/api/users/{id}` | Profil par ID |
+Remplace `TON_TOKEN_ICI` par le token copie depuis le dashboard.
 
-Documentation Swagger interactive : http://localhost:8080/swagger-ui/index.html
+### 4. Verifier l'installation
 
----
-
-## 🛠️ Automatisation
-
-Le dossier `automation/` contient un script PowerShell qui :
-
-✅ Vérifie les dépendances
-✅ Lance Ollama en arrière-plan
-✅ Gère les terminaux
-✅ Capture l'URL ngrok
-✅ Met à jour automatiquement `application.properties`
-✅ Lance Spring Boot
-
-```bash
-# Menu interactif
-make run
-
-# Ou directement
-powershell -NoProfile -ExecutionPolicy Bypass -File automation/run.ps1
+```powershell
+ngrok version
 ```
 
 ---
 
-## 📝 Notes
+## Options du menu
 
-- 🎯 **Première utilisation** : Lance `make run` et suis le menu
-- ⏳ **Warm-up Ollama** : Premier appel prend ~50s, les suivants sont rapides
-- 🔄 **Cold start** : Après 5 min d'inactivité, le modèle se décharge
-- 🌐 **Démo ngrok** : L'URL change à chaque session (à noter!)
-
----
-
-## 📚 Documentation
-
-- `AI_Model/setup-model.md` - Guide installation Ollama + ngrok
-- `AI_Model/VALIDATION-OLLAMA.md` - Détails IA et modèles
-- `automation/README.md` - Guide automation
-- `TESTS.md` - Plan et résultats des tests fonctionnels
-- `Sujet.pdf` - Sujet officiel ESGI M1 AL IABD
+| Option            | Description                                          |
+|-------------------|------------------------------------------------------|
+| 1 - LOCAL         | Ollama en local + Spring Boot                        |
+| 2 - APP ONLY      | Spring Boot seul (detecte ngrok auto si actif)       |
+| 3 - OLLAMA + NGROK| Partage ton GPU via ngrok avec l'equipe              |
+| 4 - FULL          | Ollama + ngrok + Spring Boot tout-en-un              |
+| 5 - DOWNLOAD MODEL| Telecharge qwen2.5vl:7b (~6 Go)                     |
 
 ---
 
-## 🚀 Démarrage Typique
+## Detection automatique de ngrok
 
-```bash
-# 1. Menu interactif
-make run
-
-# 2. Choix : "1" pour local ou "2" pour ngrok
-# 3. Attendre les 3 terminaux0
-# 4. Accéder à http://localhost:8080
-```
+Quand ngrok est deja actif, le script detecte l'URL publique automatiquement
+et injecte `OLLAMA_URL` avant de demarrer Spring Boot — aucune configuration manuelle.
 
 ---
 
-**Bon développement ! 🎉**
+## Acces a l'application
 
+- API : http://localhost:8080
+- Swagger : http://localhost:8080/swagger-ui.html
+- H2 Console : http://localhost:8080/h2-console
