@@ -1,5 +1,23 @@
 // Screens — Auth, Dashboard, Upload, Correction, History, Profile — responsive
 
+// Score santé A→E (heuristique calories + macros)
+// Définie ici car screens.jsx est chargé avant app.jsx ; app.jsx expose aussi window.healthScore
+function healthScore(m){
+  const kcal=(m.kMin+m.kMax)/2;
+  const items=(m.analysisRaw&&m.analysisRaw.detectedItems)||[];
+  const prot=items.reduce((s,i)=>s+(i.protein||0),0);
+  const carbs=items.reduce((s,i)=>s+(i.carbs||0),0);
+  const fat=items.reduce((s,i)=>s+(i.fat||0),0);
+  let pts=0;
+  if(kcal<700)pts+=2;else if(kcal<900)pts+=1;
+  if(prot>=20)pts+=2;else if(prot>=15)pts+=1;
+  if(fat<20)pts+=1;
+  if(carbs>40&&carbs<80)pts+=1;
+  const grade=['E','D','C','B','A'][Math.min(4,pts)];
+  const color={A:'#4a8a3c',B:'#7fa644',C:'#d4a13c',D:'#d47a2f',E:'#c14a2f'}[grade];
+  return{grade,color};
+}
+
 function Auth({T,onAuth,mobile}){
   const [mode,setMode]=useState('signup');
   const [em,setEm]=useState(''),[un,setUn]=useState(''),[pw,setPw]=useState('');
@@ -183,11 +201,16 @@ function MealRow({m,T,onClick,compact}){
   const mid=Math.round((m.kMin+m.kMax)/2);
   const photo=m.img||m.photoUrl;
   const [imgFailed,setImgFailed]=useState(false);
+  const hs=healthScore(m);
   return <button onClick={onClick} style={{padding:'9px 10px',display:'flex',alignItems:'center',gap:10,background:T.surface,border:`1px solid ${T.hairline}`,borderRadius:16,cursor:'pointer',textAlign:'left',width:'100%'}}>
-    {photo && !imgFailed
-      ? <img src={photo} alt="" onError={()=>setImgFailed(true)} style={{width:46,height:46,flexShrink:0,borderRadius:12,objectFit:'cover'}}/>
-      : <Dish seed={m.seed} style={{width:46,height:46,flexShrink:0}} rounded={12}/>
-    }
+    <div style={{position:'relative',flexShrink:0}}>
+      {photo && !imgFailed
+        ? <img src={photo} alt="" onError={()=>setImgFailed(true)} style={{width:46,height:46,borderRadius:12,objectFit:'cover',display:'block'}}/>
+        : <Dish seed={m.seed} style={{width:46,height:46}} rounded={12}/>
+      }
+      {/* Badge santé A→E */}
+      <div style={{position:'absolute',bottom:-4,right:-6,width:22,height:22,borderRadius:'50%',background:hs.color,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'"Fraunces",serif',fontSize:11,fontWeight:700,boxShadow:'0 1px 4px rgba(0,0,0,.25)',border:'1.5px solid #fff',lineHeight:1}} title={'Score santé '+hs.grade}>{hs.grade}</div>
+    </div>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'nowrap'}}>
         <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.ink,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:'1 1 0'}}>{m.name}</div>

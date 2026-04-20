@@ -81,6 +81,23 @@ const API = {
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────────
 
+// Calcule le score santé A→E d'un repas à partir de ses macros estimées
+function healthScore(m) {
+  const kcal = (m.kMin + m.kMax) / 2;
+  const items = m.analysisRaw?.detectedItems || [];
+  const prot  = items.reduce((s, i) => s + (i.protein  || 0), 0);
+  const carbs  = items.reduce((s, i) => s + (i.carbs    || 0), 0);
+  const fat    = items.reduce((s, i) => s + (i.fat      || 0), 0);
+  let points = 0;
+  if (kcal < 700) points += 2; else if (kcal < 900) points += 1;
+  if (prot >= 20) points += 2; else if (prot >= 15) points += 1;
+  if (fat < 20)   points += 1;
+  if (carbs > 40 && carbs < 80) points += 1;
+  const grade = ['E', 'D', 'C', 'B', 'A'][Math.min(4, points)];
+  const color = { A: '#4a8a3c', B: '#7fa644', C: '#d4a13c', D: '#d47a2f', E: '#c14a2f' }[grade];
+  return { grade, color };
+}
+
 // Convertit un MealHistoryItemDto + MealAnalysisResponseDto en shape utilisée par les composants v2
 function toViewMeal(histItem, analysis) {
   const mid = analysis
@@ -664,8 +681,24 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
         </div>
 
         <div>
-          <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 26 : 30, color: T.ink, letterSpacing: '-.02em', lineHeight: 1.1, marginBottom: 4, fontWeight: 500 }}>
-            {displayMeal.name}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 26 : 30, color: T.ink, letterSpacing: '-.02em', lineHeight: 1.1, fontWeight: 500, flex: 1, minWidth: 0 }}>
+              {displayMeal.name}
+            </div>
+            {(() => {
+              const hs = healthScore(displayMeal);
+              return (
+                <div title={'Score santé : ' + hs.grade} style={{
+                  width: 60, height: 60, borderRadius: '50%', flexShrink: 0,
+                  background: hs.color, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: '"Fraunces",serif', fontSize: 30, fontWeight: 700, fontStyle: 'italic',
+                  boxShadow: '0 4px 14px rgba(0,0,0,.18)',
+                }}>
+                  {hs.grade}
+                </div>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
             {(() => {
@@ -1002,5 +1035,8 @@ function App() {
     </div>
   );
 }
+
+// Exposer healthScore pour screens.jsx (chargé avant app.jsx dans le HTML)
+window.healthScore = healthScore;
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
