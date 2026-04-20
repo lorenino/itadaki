@@ -1,8 +1,43 @@
 # Main menu for ITADAKI
 # Interactive menu to launch different modes
 
-$ScriptDir = Split-Path -Parent $PSScriptRoot
+# Get project root dynamically
 $AutomationDir = Split-Path -Parent $PSScriptRoot
+$ProjectRoot = Split-Path -Parent $AutomationDir
+
+# Find Ollama path
+function Get-OllamaPath {
+    $paths = @(
+        "C:\Users\$env:USERNAME\AppData\Local\Programs\Ollama\ollama.exe",
+        "C:\Program Files\Ollama\ollama.exe",
+        "C:\Program Files (x86)\Ollama\ollama.exe"
+    )
+
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+    return $null
+}
+
+# Find ngrok path
+function Get-NgrokPath {
+    $paths = @(
+        "C:\ngrok\ngrok.exe",
+        "C:\Program Files\ngrok\ngrok.exe"
+    )
+
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            return $path
+        }
+    }
+    return $null
+}
+
+$OLLAMA_PATH = Get-OllamaPath
+$NGROK_PATH = Get-NgrokPath
 
 function Show-Menu {
     Clear-Host

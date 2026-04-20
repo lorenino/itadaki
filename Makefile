@@ -9,5 +9,5 @@ help:
 	@echo ""
 
 run:
-	powershell -NoProfile -ExecutionPolicy Bypass -File "automation\menu.ps1"
+	powershell -NoProfile -ExecutionPolicy Bypass -File "automation\run.ps1"
 
