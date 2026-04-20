@@ -2,6 +2,7 @@ package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.business.Meal;
 import fr.esgi.hla.itadaki.business.enums.MealStatus;
+import fr.esgi.hla.itadaki.business.enums.MealType;
 import fr.esgi.hla.itadaki.dto.meal.MealResponseDto;
 import fr.esgi.hla.itadaki.dto.meal.MealUploadResponseDto;
 import fr.esgi.hla.itadaki.exception.ForbiddenException;
@@ -53,6 +54,18 @@ public class MealServiceImpl implements MealService {
     public MealResponseDto findById(Long id) {
         Meal meal = mealRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + id));
+        return mealMapper.toDto(meal);
+    }
+
+    @Override
+    public MealResponseDto updateMealType(Long id, MealType mealType, Long requestingUserId) {
+        Meal meal = mealRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + id));
+        if (!meal.getUser().getId().equals(requestingUserId)) {
+            throw new ForbiddenException("You do not have permission to update this meal");
+        }
+        meal.setMealType(mealType);
+        meal = mealRepository.save(meal);
         return mealMapper.toDto(meal);
     }
 

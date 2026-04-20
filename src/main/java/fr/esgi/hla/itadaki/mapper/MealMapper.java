@@ -57,6 +57,7 @@ public interface MealMapper {
     @Mapping(target = "correction", ignore = true)
     @Mapping(target = "uploadedAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "mealType", ignore = true)
     Meal partialUpdate(MealResponseDto dto, @MappingTarget Meal meal);
 
     List<MealResponseDto> toDto(List<Meal> meals);

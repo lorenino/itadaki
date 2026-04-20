@@ -11,6 +11,7 @@ import java.io.Serializable;
 public record MealResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         String status,
+        String mealType,
         MealPhotoResponseDto photo,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) String uploadedAt,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) String updatedAt,

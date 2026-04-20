@@ -2,6 +2,7 @@ package fr.esgi.hla.itadaki.business;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import fr.esgi.hla.itadaki.business.enums.MealStatus;
+import fr.esgi.hla.itadaki.business.enums.MealType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,6 +13,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -48,11 +50,29 @@ public class Meal {
     @NotNull(message = "Meal status is required")
     private MealStatus status;
 
+    /**
+     * Categorie de repas (petit-dej / dej / snack / diner).
+     * Auto-detectee depuis l'heure d'upload via @PrePersist si non setee,
+     * modifiable ensuite par l'utilisateur via PATCH /api/meals/{id}/type.
+     */
+    @Enumerated(EnumType.STRING)
+    private MealType mealType;
+
     @CreationTimestamp
     private LocalDateTime uploadedAt;
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    /**
+     * Initialise mealType selon l'heure courante si pas deja defini par le user.
+     */
+    @PrePersist
+    void autoInitMealType() {
+        if (mealType == null) {
+            mealType = MealType.detectFromTime(LocalDateTime.now());
+        }
+    }
 
     /**
      * Owning side of Meal→User. FK column: user_id.

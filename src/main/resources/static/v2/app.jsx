@@ -49,6 +49,7 @@ const API = {
     },
     get: (id) => API.call('GET', '/api/meals/' + id),
     del: (id) => API.call('DELETE', '/api/meals/' + id),
+    setType: (id, mealType) => API.call('PATCH', '/api/meals/' + id + '/type', { body: { mealType } }),
   },
 
   analyses: {
@@ -89,9 +90,11 @@ function toViewMeal(histItem, analysis) {
   const ing = analysis && analysis.detectedItems
     ? analysis.detectedItems.map(i => i.name || i.toString())
     : [];
+  const mtLabels = { BREAKFAST: 'Petit-déj', LUNCH: 'Déjeuner', SNACK: 'Goûter', DINNER: 'Dîner' };
   return {
     id: 'server-' + histItem.id,
     serverId: histItem.id,
+    mealId: histItem.id,
     name: histItem.detectedDishName || analysis?.detectedDishName || 'Repas',
     ing,
     portion: 'moyen',
@@ -99,7 +102,8 @@ function toViewMeal(histItem, analysis) {
     kMax: Math.round(mid * 1.15),
     conf: analysis ? Math.round((analysis.confidenceScore || 0.8) * 100) : 80,
     date: histItem.uploadedAt || new Date().toISOString(),
-    meal: 'Repas',
+    mealType: histItem.mealType || null,
+    meal: mtLabels[histItem.mealType] || 'Repas',
     seed,
     photoUrl: histItem.photoUrl || null,
     analysisRaw: analysis,
@@ -388,7 +392,10 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       }
       setProg(100);
 
-      // Convertit en shape v2
+      // Convertit en shape v2. mealType auto-detecte par heure (fallback
+      // si le back n'a pas renvoye la valeur persistee).
+      const mtNow = detectMealType();
+      const mtLbl = { BREAKFAST: 'Petit-déj', LUNCH: 'Déjeuner', SNACK: 'Goûter', DINNER: 'Dîner' }[mtNow];
       const pseudo = {
         id: 'new-' + mealId,
         serverId: mealId,
@@ -399,7 +406,8 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
         kMax: Math.round((analysisRes.estimatedTotalCalories || 500) * 1.15),
         conf: Math.round((analysisRes.confidenceScore || 0.8) * 100),
         date: analysisRes.analyzedAt || new Date().toISOString(),
-        meal: 'Repas',
+        mealType: mtNow,
+        meal: mtLbl,
         seed: mealId % 99 + 1,
         img,
         mealId,
@@ -525,11 +533,43 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
 }
 
 // ─── Correction câblée (2ᵉ passe LLM) ───────────────────────────────────────
+// Auto-detecte le type de repas selon l'heure (miroir backend MealType.detectFromTime)
+function detectMealType(dateStrOrNow) {
+  const d = dateStrOrNow ? new Date(dateStrOrNow) : new Date();
+  const h = d.getHours();
+  if (h >= 5 && h < 11) return 'BREAKFAST';
+  if (h >= 11 && h < 15) return 'LUNCH';
+  if (h >= 15 && h < 18) return 'SNACK';
+  return 'DINNER';
+}
+const MEAL_TYPE_LABELS = {
+  BREAKFAST: 'Petit-déj',
+  LUNCH: 'Déjeuner',
+  SNACK: 'Goûter',
+  DINNER: 'Dîner',
+};
+
 function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [hint, setHint] = useState('');
   const [ld, setLd] = useState(false);
   const [reanalyzed, setReanalyzed] = useState(null);
   const [apiErr, setApiErr] = useState('');
+  const [mealType, setMealType] = useState(() => meal.mealType || detectMealType(meal.date));
+  const [typeErr, setTypeErr] = useState('');
+
+  const saveMealType = async (newType) => {
+    const mealId = meal.mealId || meal.serverId || meal.id;
+    const prev = mealType;
+    setMealType(newType); // optimistic
+    setTypeErr('');
+    if (!mealId) return;
+    try {
+      await API.meals.setType(mealId, newType);
+    } catch (e) {
+      setMealType(prev);
+      setTypeErr('Impossible de mettre à jour le type.');
+    }
+  };
 
   const doReanalyze = async () => {
     const mealId = meal.mealId || meal.serverId || meal.id;
@@ -618,9 +658,37 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
           <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 26 : 30, color: T.ink, letterSpacing: '-.02em', lineHeight: 1.1, marginBottom: 4, fontWeight: 500 }}>
             {displayMeal.name}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
             {displayMeal.ing.map((i, idx) => <Chip key={idx} T={T} variant="default">{i}</Chip>)}
           </div>
+
+          {/* Classement du repas — petit-dej / dej / snack / diner */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: T.inkMuted, marginBottom: 6 }}>
+              Catégorie du repas
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {['BREAKFAST', 'LUNCH', 'SNACK', 'DINNER'].map(t => {
+                const selected = mealType === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => saveMealType(t)}
+                    style={{
+                      padding: '6px 14px', borderRadius: 999,
+                      border: '1px solid ' + (selected ? T.accent : T.hairline),
+                      background: selected ? T.accent : 'transparent',
+                      color: selected ? '#fff' : T.ink,
+                      fontFamily: 'Inter,system-ui', fontSize: 12.5, fontWeight: 500,
+                      cursor: 'pointer', transition: 'all .15s ease',
+                    }}
+                  >{MEAL_TYPE_LABELS[t]}</button>
+                );
+              })}
+            </div>
+            {typeErr && <div style={{ color: '#b8452b', fontFamily: 'Inter,system-ui', fontSize: 11, marginTop: 4 }}>{typeErr}</div>}
+          </div>
+
           <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 18, color: T.ink, fontWeight: 600, marginBottom: 6 }}>
             {displayMeal.kMin}–{displayMeal.kMax} <span style={{ fontSize: 13, color: T.inkFaint, fontFamily: 'Inter,system-ui' }}>kcal estimées</span>
           </div>
@@ -813,6 +881,30 @@ function App() {
     setScreen('dashboard');
   };
 
+  // Ouvre un meal depuis l'historique en fetchant son analyse (ingredients, confiance)
+  // pour eviter d'afficher une vue incomplete (les histItems ne portent pas
+  // detectedItems).
+  const openMealFromServer = async (m) => {
+    setCurrentMeal(m);
+    setScreen('correction');
+    const mealId = m.mealId || m.serverId || m.id;
+    if (!mealId || String(mealId).startsWith('new-')) return;
+    try {
+      const analysis = await API.analyses.get(mealId);
+      if (analysis && analysis.id) {
+        const ing = (analysis.detectedItems || []).map(i => i.name || String(i));
+        setCurrentMeal(prev => prev && (prev.mealId === mealId || prev.serverId === mealId)
+          ? {
+              ...prev,
+              ing: ing.length ? ing : prev.ing,
+              conf: Math.round((analysis.confidenceScore || 0.8) * 100),
+              analysisRaw: analysis,
+            }
+          : prev);
+      }
+    } catch { /* 404 = pas d'analyse pour ce meal, on garde l'etat courant */ }
+  };
+
   // Responsive : détecte mobile
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
@@ -830,7 +922,7 @@ function App() {
   } else if (effectiveScreen === 'dashboard') {
     content = (
       <Shell T={T} mobile={isMobile} active="dashboard" onNav={id => setScreen(id)} user={user}>
-        <DashboardWired T={T} user={user} onUpload={() => setScreen('upload')} onHistory={() => setScreen('history')} onMeal={m => { setCurrentMeal(m); setScreen('correction'); }} mobile={isMobile} />
+        <DashboardWired T={T} user={user} onUpload={() => setScreen('upload')} onHistory={() => setScreen('history')} onMeal={openMealFromServer} mobile={isMobile} />
       </Shell>
     );
   } else if (effectiveScreen === 'upload') {
@@ -852,7 +944,7 @@ function App() {
   } else if (effectiveScreen === 'history') {
     content = (
       <Shell T={T} mobile={isMobile} active="history" onNav={id => setScreen(id)} user={user}>
-        <HistoryWired T={T} onMeal={m => { setCurrentMeal(m); setScreen('correction'); }} mobile={isMobile} />
+        <HistoryWired T={T} onMeal={openMealFromServer} mobile={isMobile} />
       </Shell>
     );
   } else if (effectiveScreen === 'profile') {
