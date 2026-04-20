@@ -1,46 +1,38 @@
-# Itadaki — Model-IA
+# Itadaki — AI_Model
 
-Package technique pour **Ahmed** (archi Java) et **Hugo** (data scientist).
-Tout ce qu'il faut pour brancher Spring AI ↔ Ollama dans l'architecture Spring Boot du projet.
+Package technique pour **Ahmed** (archi Java) : tout ce qu'il faut pour brancher Spring AI ↔ Ollama dans l'architecture Spring Boot du projet.
+
+L'infra Ollama est validée côté Hugo (voir `VALIDATION-OLLAMA.md`). Ahmed n'a plus qu'à configurer et appeler.
 
 ## Fichiers
 
-| Fichier | Pour qui | Contenu |
-|---|---|---|
-| `HUGO-SETUP-OLLAMA.md` | **Hugo** | Setup complet step-by-step : install Ollama, pull modèles, tests texte+image, benchmark, expo LAN |
-| `MODELE.md` | Hugo | Modèle Ollama choisi, commandes install, pre-pull |
-| `SCHEMA.md` | **Ahmed** | JSON de sortie + records Java + entités JPA + DTOs |
-| `PROMPTS.md` | Hugo | Prompt système v1 (analyse) et v2 (correction 2ᵉ passe) |
-| `APPLICATION-PROPERTIES.md` | Ahmed | Clés de config Spring AI à ajouter à `application.properties` |
-| `FLOW.md` | Ahmed | Séquences request/response (upload, analyse, correction, historique) |
-| `exemples/` | Ahmed | Code Java prêt à copier : `AnalyseResult.java`, `AnalyseService.java`, sample JSON |
-| `scripts/benchmark.ps1` | Hugo | Script PowerShell qui teste une batterie de photos sur les 2 modèles → CSV comparatif |
+| Fichier | Contenu |
+|---|---|
+| `VALIDATION-OLLAMA.md` | **À lire en premier.** Modèle retenu, IP LAN Ollama, prompt système validé, exemple JSON réel, config Spring AI à poser |
+| `SCHEMA.md` | JSON de sortie + records Java + entités JPA (`Meal`/`MealAnalysis`) + DTOs + repos |
+| `APPLICATION-PROPERTIES.md` | Clés Spring AI / multipart / Swagger à ajouter dans `application.properties` |
+| `FLOW.md` | Séquences request/response des 8 endpoints (upload, analyse, correction 2ᵉ passe, historique, image stream) |
+| `exemples/AnalyseResult.java` | Record de sortie du LLM, prêt à copier |
+| `exemples/AnalyseService.java` | Service Spring AI complet (analyse initiale + 2ᵉ passe + retry) |
+| `exemples/response-sample.json` | 5 exemples de réponses JSON valides pour tests |
 
 ## Quickstart Ahmed
 
-1. Lire `SCHEMA.md` → tu codes les records + entités JPA
-2. Lire `FLOW.md` → tu comprends les 4 endpoints à créer
-3. Copier `exemples/AnalyseResult.java` dans `src/main/java/fr/esgi/hla/itadaki/ai/`
-4. Copier `exemples/AnalyseService.java` comme squelette
-5. Ajouter les clés de `APPLICATION-PROPERTIES.md` à `src/main/resources/application.properties`
+1. Lire `VALIDATION-OLLAMA.md` → tu as tout : IP, modèle, prompt, config properties.
+2. Lire `SCHEMA.md` → nomenclature et types.
+3. Copier/adapter `exemples/AnalyseResult.java` dans `src/main/java/fr/esgi/hla/itadaki/...`
+4. Copier/adapter `exemples/AnalyseService.java` comme squelette du service Ollama.
+5. Ajouter les clés de `APPLICATION-PROPERTIES.md` à `src/main/resources/application.properties` (surtout `spring.ai.ollama.base-url=http://10.213.203.128:11434`).
 
-## Quickstart Hugo
+## Décisions actées (cf. `../DECISIONS.md`)
 
-1. Lire `MODELE.md` → tu pull les 2 modèles ce soir (`qwen2.5vl:7b` + `gemma3:4b`)
-2. Lire `PROMPTS.md` → tu itères sur les prompts v1/v2 avec une mini-batterie de photos test
-3. Benchmarker les 2 modèles sur la même batterie (latence + taux JSON valide + qualité qualitative)
-
-## Décisions prises (cf. `../DECISIONS.md`)
-
-- **Modèle principal** : `qwen2.5vl:7b` (benchmark avec `gemma3:4b` en fallback)
+- **Modèle** : `qwen2.5vl:7b` (test image validé → JSON strict, FR, 6 ingrédients, toutes règles schéma respectées)
 - **Stratégie calories** : LLM direct + fourchette `caloriesMin`/`caloriesMax` + disclaimer UX
-- **Portion** : catégorie qualitative `petit`/`moyen`/`grand` demandée au LLM
-- **Langue** : prompt en EN pour fiabilité, sortie FR imposée dans le schema
-- **Correction (BF3)** : reconstruction stateless (toutes les passes conservées en DB, flag `active` sur la passe affichée)
-- **Retry** : 1 retry avec prompt renforcé si JSON invalide, sinon 503 UX FR
+- **Portion** : catégorie qualitative `petit`/`moyen`/`grand`
+- **Langue** : prompt EN + instruction "nomPlat et ingredients en français"
+- **Correction 2ᵉ passe (BF3)** : reconstruction stateless — on renvoie au LLM `analyseV1_json + user_correction`, toutes les passes conservées en DB
+- **Retry** : 1 retry prompt renforcé si JSON invalide, sinon fallback UX 503
 
 ## Avertissement Spring AI 2.0.0-M4
 
-Le pom généré par Ahmed utilise `spring-ai-starter-model-ollama:2.0.0-M4` (milestone, pré-release). Les exemples de code de ce dossier sont **testés sur la série 1.x** qui a la doc la plus stable. En 2.0-M4, certains noms d'API peuvent avoir bougé (`UserMessage.builder().media()` vs `.images()`, noms de propriétés). Les fichiers flaguent les points à vérifier avec la mention `⚠ vérifier 2.0-M4`.
-
-Si blocage 2.0-M4 : rollback vers Spring AI 1.1.4 (GA stable). Voir `APPLICATION-PROPERTIES.md` dernière section.
+Le pom utilise `spring-ai-starter-model-ollama:2.0.0-M4` (milestone). Les exemples de code sont basés sur la doc 1.x. Vérifier au premier `mvn compile` les signatures `UserMessage.builder().media()` et `Media`. Si ça casse, voir `APPLICATION-PROPERTIES.md` → section rollback.

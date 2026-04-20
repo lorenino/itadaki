@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Sortie du LLM multimodal Ollama (décodage JSON via BeanOutputConverter Spring AI).
  *
- * Schéma imposé dans le prompt système (cf. Model-IA/PROMPTS.md) :
+ * Schéma imposé dans le prompt système (cf. AI_Model/VALIDATION-OLLAMA.md) :
  * {
  *   "nomPlat":       "string (FR)",
  *   "ingredients":   ["string (FR)", ...],
