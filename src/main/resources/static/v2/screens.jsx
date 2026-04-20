@@ -174,7 +174,11 @@ function MealRow({m,T,onClick,compact}){
       : <Dish seed={m.seed} style={{width:46,height:46,flexShrink:0}} rounded={12}/>
     }
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.ink,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.name}</div>
+      <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'nowrap'}}>
+        <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.ink,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:'1 1 0'}}>{m.name}</div>
+        {(m.status==='CORRECTED'||(m.analysisRaw&&m.analysisRaw.hint))&&
+          <span style={{flexShrink:0,fontSize:10,fontFamily:'Inter,system-ui',fontWeight:600,padding:'2px 6px',borderRadius:999,background:T.matcha||'#4caf50',color:'#fff',lineHeight:1.4}}>Corrigé</span>}
+      </div>
       <div style={{fontFamily:'Inter,system-ui',fontSize:11,color:T.inkFaint,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.meal} · {t}</div>
     </div>
     <div style={{textAlign:'right',flexShrink:0,display:'flex',alignItems:'baseline',gap:3}}>
