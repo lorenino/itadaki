@@ -7,11 +7,14 @@ import java.util.Optional;
 
 /**
  * Repository for User entity. Spring Data detects this automatically — no @Repository needed.
- * TODO: boolean existsByEmail(String email);
- * TODO: boolean existsByUsername(String username);
- * TODO: Optional<User> findByEmail(String email);
- * TODO: Optional<User> findByUsername(String username);
  */
 public interface UserRepository extends JpaRepository<User, Long> {
-    // TODO: Add query methods listed above
+
+    boolean existsByEmail(String email);
+
+    boolean existsByUsername(String username);
+
+    Optional<User> findByEmail(String email);
+
+    Optional<User> findByUsername(String username);
 }

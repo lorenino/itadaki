@@ -7,8 +7,10 @@ import java.util.Optional;
 
 /**
  * Repository for MealCorrection entity. Spring Data detects this automatically — no @Repository needed.
- * TODO: Optional<MealCorrection> findByMealId(Long mealId);
  */
 public interface MealCorrectionRepository extends JpaRepository<MealCorrection, Long> {
-    // TODO: Add query methods listed above
+
+    Optional<MealCorrection> findByMealId(Long mealId);
+
+    void deleteByMealId(Long mealId);
 }

@@ -7,9 +7,10 @@ import java.util.Optional;
 
 /**
  * Repository for MealAnalysis entity. Spring Data detects this automatically — no @Repository needed.
- * TODO: Optional<MealAnalysis> findByMealId(Long mealId);
- * TODO: Aggregation queries for statistics (sum/avg of calories per user per day).
  */
 public interface MealAnalysisRepository extends JpaRepository<MealAnalysis, Long> {
-    // TODO: Add query methods listed above
+
+    Optional<MealAnalysis> findByMealId(Long mealId);
+
+    void deleteByMealId(Long mealId);
 }
