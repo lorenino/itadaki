@@ -6,6 +6,7 @@ import fr.esgi.hla.itadaki.business.Meal;
 import fr.esgi.hla.itadaki.business.MealAnalysis;
 import fr.esgi.hla.itadaki.dto.stats.DailyCaloriesDto;
 import fr.esgi.hla.itadaki.dto.stats.StatsOverviewDto;
+import fr.esgi.hla.itadaki.dto.stats.StreakDto;
 import fr.esgi.hla.itadaki.repository.MealAnalysisRepository;
 import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.StatsService;
@@ -19,8 +20,10 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -170,5 +173,61 @@ public class StatsServiceImpl implements StatsService {
                 ))
                 .sorted((a, b) -> b.date().compareTo(a.date()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Calcule la série de jours consécutifs actifs de l'utilisateur.
+     * Un jour est "actif" s'il contient au moins 1 meal.
+     * current : série depuis aujourd'hui en remontant (ou depuis hier si aujourd'hui inactif).
+     * longest : plus longue série jamais réalisée.
+     */
+    @Override
+    public StreakDto getStreak(Long userId) {
+        // Récupère tous les repas de l'utilisateur (sans limite)
+        List<Meal> allMeals = mealRepository.findAllByUserId(
+                userId, org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)
+        ).getContent();
+
+        if (allMeals.isEmpty()) {
+            return new StreakDto(0, 0);
+        }
+
+        // Ensemble des jours actifs
+        Set<LocalDate> activeDays = new HashSet<>();
+        for (Meal meal : allMeals) {
+            activeDays.add(meal.getUploadedAt().toLocalDate());
+        }
+
+        LocalDate today = LocalDate.now();
+
+        // Calcul du current streak :
+        // On tolère que aujourd'hui soit inactif (le jour n'est pas terminé).
+        // On part de "today" si actif, sinon de "yesterday".
+        LocalDate cursor = activeDays.contains(today) ? today : today.minusDays(1);
+        int current = 0;
+        while (activeDays.contains(cursor)) {
+            current++;
+            cursor = cursor.minusDays(1);
+        }
+
+        // Calcul du longest streak : on trie les jours actifs et on cherche la plus longue suite
+        List<LocalDate> sortedDays = activeDays.stream()
+                .sorted()
+                .collect(Collectors.toList());
+
+        int longest = 0;
+        int run = 0;
+        LocalDate prev = null;
+        for (LocalDate d : sortedDays) {
+            if (prev == null || d.equals(prev.plusDays(1))) {
+                run++;
+            } else {
+                run = 1;
+            }
+            if (run > longest) longest = run;
+            prev = d;
+        }
+
+        return new StreakDto(current, longest);
     }
 }

@@ -70,6 +70,7 @@ const API = {
     overview: () => API.call('GET', '/api/stats/overview'),
     daily: (from, to) =>
       API.call('GET', '/api/stats/daily?from=' + from + '&to=' + to),
+    streak: () => API.call('GET', '/api/stats/streak'),
   },
 
   corrections: {
@@ -289,13 +290,14 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
   const [meals, setMeals] = useState([]);
   const [days, setDays] = useState(() => buildLast7(null));
   const [overview, setOverview] = useState(null);
+  const [streak, setStreak] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [histPage, dailyData, overviewData] = await Promise.all([
+        const [histPage, dailyData, overviewData, streakData] = await Promise.all([
           API.history.list(0, 20).catch(() => ({ content: [] })),
           (async () => {
             const today = new Date();
@@ -306,12 +308,14 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
             ).catch(() => []);
           })(),
           API.stats.overview().catch(() => null),
+          API.stats.streak().catch(() => null),
         ]);
         const items = histPage.content || [];
         const viewMeals = items.map(h => toViewMeal(h, null));
         setMeals(viewMeals);
         setDays(buildLast7(dailyData));
         setOverview(overviewData);
+        setStreak(streakData);
       } catch (e) {
         console.warn('Dashboard load error', e);
       } finally {
@@ -326,7 +330,7 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
 
   // On réutilise le composant Dashboard de v2/screens.jsx en lui passant les données réelles
   return <Dashboard T={T} user={user} meals={meals} days_override={days} overview={overview}
-    onUpload={onUpload} onHistory={onHistory} onMeal={onMeal} mobile={mobile} />;
+    streak={streak} onUpload={onUpload} onHistory={onHistory} onMeal={onMeal} mobile={mobile} />;
 }
 
 // ─── Helpers upload ──────────────────────────────────────────────────────────
