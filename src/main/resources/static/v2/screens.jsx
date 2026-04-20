@@ -82,11 +82,18 @@ function Auth({T,onAuth,mobile}){
   </div>;
 }
 
-function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,overview}){
+function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,overview,streak}){
   const days=days_override||last7(meals);
   const today=days[6];
   const target=2200;
-  const pct=Math.min(1,today.calories/target);
+  const over=today.calories>target;
+  // Pour la jauge : on sépare la partie "normale" (0→target) et "dépassement" (target→calories)
+  const R=50; const CIRC=2*Math.PI*R;
+  const pctNormal=Math.min(1,today.calories/target); // part orange (toujours 0→1)
+  const pctOver=over?(today.calories-target)/target:0; // part rouge supplémentaire
+  const dashNormal=CIRC*pctNormal;
+  const dashOver=Math.min(CIRC*pctOver,CIRC-dashNormal); // ne dépasse pas le tour complet
+  const pctPct=Math.round((today.calories/target)*100);
   const qual=today.calories<1400?'Léger':today.calories<2000?'Équilibré':today.calories<2400?'Copieux':'Au-delà';
   const qualC=today.calories<1400?T.matcha:today.calories<2000?T.matcha:today.calories<2400?T.warn:T.danger;
   const maxBar=Math.max(...days.map(d=>d.calories),1800);
@@ -105,17 +112,33 @@ function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,
       </div>
     </div>
 
+    {/* Streak — affiché si current >= 2 */}
+    {streak&&streak.current>=2&&<div style={{background:`linear-gradient(135deg,#f97316,#ef4444)`,borderRadius:18,padding:mobile?'12px 16px':'14px 20px',marginBottom:mobile?12:16,display:'flex',alignItems:'center',gap:14,boxShadow:'0 4px 16px rgba(239,68,68,.22)'}}>
+      <span style={{fontSize:28,lineHeight:1,flexShrink:0}}>🔥</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:'"Fraunces",serif',fontSize:mobile?18:22,fontStyle:'italic',fontWeight:500,color:'#fff',letterSpacing:'-.01em'}}>{streak.current} jours d'affilée</div>
+        <div style={{fontFamily:'Inter,system-ui',fontSize:11,color:'rgba(255,255,255,.75)',marginTop:2}}>Plus long : {streak.longest} jours</div>
+      </div>
+    </div>}
+
     <div style={{display:'grid',gridTemplateColumns:mobile?'1fr':'1.2fr 1fr',gap:mobile?12:16,marginBottom:mobile?12:16}}>
-      {/* Day summary */}
+      {/* Day summary — jauge double anneau */}
       <div style={{background:T.surface,borderRadius:24,padding:mobile?18:24,border:`1px solid ${T.hairline}`,display:'flex',alignItems:'center',gap:mobile?16:22,position:'relative',overflow:'hidden'}}>
         <svg viewBox="0 0 400 200" preserveAspectRatio="none" style={{position:'absolute',inset:0,width:'100%',height:'100%',opacity:.35,pointerEvents:'none'}}>
           <path d="M0,140 Q100,100 200,130 Q300,160 400,110 L400,200 L0,200 Z" fill={T.accentSoft}/>
         </svg>
         <div style={{position:'relative',width:mobile?100:120,height:mobile?100:120,flexShrink:0}}>
           <svg width={mobile?100:120} height={mobile?100:120} viewBox="0 0 120 120" style={{transform:'rotate(-90deg)'}}>
-            <circle cx="60" cy="60" r="50" fill="none" stroke={T.hairline} strokeWidth="9"/>
-            <circle cx="60" cy="60" r="50" fill="none" stroke={T.accent} strokeWidth="9" strokeLinecap="round"
-              strokeDasharray={`${2*Math.PI*50*pct} ${2*Math.PI*50}`} style={{transition:'stroke-dasharray .8s ease'}}/>
+            {/* Piste de fond */}
+            <circle cx="60" cy="60" r={R} fill="none" stroke={T.hairline} strokeWidth="9"/>
+            {/* Anneau orange — part normale jusqu'à l'objectif */}
+            <circle cx="60" cy="60" r={R} fill="none" stroke={T.accent} strokeWidth="9" strokeLinecap="round"
+              strokeDasharray={`${dashNormal} ${CIRC}`} style={{transition:'stroke-dasharray .8s ease'}}/>
+            {/* Anneau rouge — dépassement (décalé après la part orange) */}
+            {over&&dashOver>0&&<circle cx="60" cy="60" r={R} fill="none" stroke="#c14a2f" strokeWidth="9" strokeLinecap="round"
+              strokeDasharray={`${dashOver} ${CIRC}`}
+              strokeDashoffset={-(dashNormal)}
+              style={{transition:'stroke-dasharray .8s ease,stroke-dashoffset .8s ease'}}/>}
           </svg>
           <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
             <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:mobile?22:26,fontWeight:600,color:T.ink,letterSpacing:'-.02em'}}>{today.calories}</div>
@@ -125,7 +148,10 @@ function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,
         <div style={{flex:1,minWidth:0,position:'relative'}}>
           <div style={{fontFamily:'Inter,system-ui',fontSize:11.5,color:T.inkMuted,textTransform:'uppercase',letterSpacing:'.1em',fontWeight:500}}>Apport du jour</div>
           <div style={{fontFamily:'"Fraunces",serif',fontSize:mobile?30:36,color:qualC,letterSpacing:'-.02em',marginTop:4,fontStyle:'italic',lineHeight:1,fontWeight:500}}>{qual}</div>
-          <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.inkMuted,marginTop:8,lineHeight:1.4}}>
+          <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:10,color:over?'#c14a2f':T.inkFaint,marginTop:6,letterSpacing:'.04em'}}>
+            {pctPct}% obj.{over?' ⚠':''}
+          </div>
+          <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.inkMuted,marginTop:4,lineHeight:1.4}}>
             {todayMeals.length?`${todayMeals.length} repas · objectif ${target} kcal`:`Aucun repas · objectif ${target} kcal`}
           </div>
         </div>
