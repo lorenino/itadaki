@@ -1,22 +1,34 @@
 package fr.esgi.hla.itadaki.config;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 /**
- * TODO: Ollama AI integration configuration.
- *       - Read Ollama base URL from application.properties (spring.ai.ollama.base-url)
- *       - Read model name from application.properties (spring.ai.ollama.chat.model)
- *       - Optionally expose a configured OllamaChatClient or RestTemplate bean
- *         for use in OllamaServiceImpl.
+ * Ollama AI integration configuration.
  *
- *       Depends on: Spring AI Ollama starter or manual RestTemplate setup.
+ * Exposes a {@link RestClient} bean pre-configured with:
+ * <ul>
+ *   <li>the Ollama base URL (from {@code spring.ai.ollama.base-url}, overridable
+ *       at runtime via the {@code OLLAMA_URL} environment variable — used to
+ *       point the app at a ngrok tunnel for the demo)</li>
+ *   <li>the {@code ngrok-skip-browser-warning} header injected on every
+ *       outbound request, so the free-tier ngrok warning HTML page never
+ *       reaches our JSON parser</li>
+ * </ul>
+ *
+ * Consumed by {@code OllamaServiceImpl} to reach the Ollama {@code /api/chat}
+ * endpoint.
  */
 @Configuration
 public class OllamaConfig {
 
-    // TODO: @Value("${spring.ai.ollama.base-url}") private String ollamaBaseUrl;
-    // TODO: @Value("${spring.ai.ollama.chat.model}") private String modelName;
-
-    // TODO: @Bean RestTemplate ollamaRestTemplate() — configured with base URL
-    //       or expose an OllamaChatClient bean if using Spring AI starter
+    @Bean
+    public RestClient ollamaRestClient(@Value("${spring.ai.ollama.base-url}") String baseUrl) {
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader("ngrok-skip-browser-warning", "any")
+                .build();
+    }
 }
