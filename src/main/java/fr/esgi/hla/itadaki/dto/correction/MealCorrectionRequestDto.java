@@ -1,13 +1,17 @@
 package fr.esgi.hla.itadaki.dto.correction;
 
+import jakarta.validation.constraints.NotEmpty;
+
+import java.io.Serializable;
 import java.util.List;
 
 /**
- * TODO: DTO for submitting a user correction on a meal analysis.
- *       Fields to add: correctedItems (list of corrected food items), note.
- *       Add @NotEmpty on correctedItems.
+ * DTO for submitting a user correction on a meal analysis.
+ * TODO: Validated at controller level with @Valid.
+ * TODO: MealCorrectionValidator called in CorrectionServiceImpl for business-level checks.
  */
-public class MealCorrectionRequestDto {
-    // TODO: Add List<CorrectedFoodItemDto> correctedItems
-    // TODO: Add String note (optional user comment)
+public record MealCorrectionRequestDto(
+        @NotEmpty(message = "Corrected items list must not be empty") List<CorrectedFoodItemDto> correctedItems,
+        String note
+) implements Serializable {
 }

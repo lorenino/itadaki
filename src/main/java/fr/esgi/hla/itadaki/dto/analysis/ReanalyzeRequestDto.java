@@ -1,10 +1,12 @@
 package fr.esgi.hla.itadaki.dto.analysis;
 
+import java.io.Serializable;
+
 /**
- * TODO: DTO for requesting a re-analysis of an already-uploaded meal.
- *       May include optional hints or user-provided context to guide the AI.
- *       Fields to add: hint (optional textual context for the AI prompt).
+ * DTO for requesting a re-analysis of an already-uploaded meal.
+ * TODO: hint is injected into the Ollama prompt to guide re-analysis.
  */
-public class ReanalyzeRequestDto {
-    // TODO: Add String hint (optional user hint to improve AI analysis)
+public record ReanalyzeRequestDto(
+        String hint
+) implements Serializable {
 }

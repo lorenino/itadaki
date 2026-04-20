@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.CorrectionService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
  *               MealCorrectionValidator
  */
 @Service
+@RequiredArgsConstructor
 public class CorrectionServiceImpl implements CorrectionService {
 
     // TODO: Inject MealRepository

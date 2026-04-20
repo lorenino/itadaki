@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.FileStorageService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
  *       Inject: (none initially — reads config from @Value or properties bean)
  */
 @Service
+@RequiredArgsConstructor
 public class FileStorageServiceImpl implements FileStorageService {
 
     // TODO: @Value("${app.upload.dir}") private String uploadDir;

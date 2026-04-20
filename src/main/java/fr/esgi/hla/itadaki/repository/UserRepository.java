@@ -2,17 +2,16 @@ package fr.esgi.hla.itadaki.repository;
 
 import fr.esgi.hla.itadaki.business.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
 
 /**
- * TODO: Repository for User entity.
- *       Custom queries to add:
- *       - findByEmail(String email) → Optional<User>
- *       - findByUsername(String username) → Optional<User>
- *       - existsByEmail(String email) → boolean
- *       - existsByUsername(String username) → boolean
+ * Repository for User entity. Spring Data detects this automatically — no @Repository needed.
+ * TODO: boolean existsByEmail(String email);
+ * TODO: boolean existsByUsername(String username);
+ * TODO: Optional<User> findByEmail(String email);
+ * TODO: Optional<User> findByUsername(String username);
  */
-@Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    // TODO: Add custom query methods listed above
+    // TODO: Add query methods listed above
 }

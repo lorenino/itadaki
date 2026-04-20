@@ -1,17 +1,19 @@
 package fr.esgi.hla.itadaki.dto.stats;
 
+import java.io.Serializable;
+
 /**
- * TODO: DTO for the overall nutritional statistics overview of a user.
- *       Fields to add: totalMeals, totalCalories, avgDailyCalories,
- *       avgProtein, avgCarbs, avgFat, periodFrom, periodTo.
+ * DTO for the overall nutritional statistics overview of a user.
+ * TODO: Built from aggregation queries in StatsServiceImpl.
  */
-public class StatsOverviewDto {
-    // TODO: Add int totalMeals
-    // TODO: Add Double totalCalories
-    // TODO: Add Double avgDailyCalories
-    // TODO: Add Double avgProtein
-    // TODO: Add Double avgCarbs
-    // TODO: Add Double avgFat
-    // TODO: Add String periodFrom (ISO-8601)
-    // TODO: Add String periodTo (ISO-8601)
+public record StatsOverviewDto(
+        int totalMeals,
+        Double totalCalories,
+        Double avgDailyCalories,
+        Double avgProtein,
+        Double avgCarbs,
+        Double avgFat,
+        String periodFrom,
+        String periodTo
+) implements Serializable {
 }

@@ -8,37 +8,42 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * JPA entity representing a meal submitted by a user for analysis.
+ * A Meal is the central aggregate: it owns a MealPhoto, a MealAnalysis and a MealCorrection.
  *
- * TODO: Add remaining fields: imagePath, uploadedAt, analyzedAt
- * TODO: Add @ManyToOne relation to User (owner)
- * TODO: Add @OneToOne relation to MealAnalysis
- * TODO: Add @OneToOne relation to MealCorrection
+ * TODO: Add @CreationTimestamp LocalDateTime uploadedAt
+ * TODO: Add @UpdateTimestamp LocalDateTime updatedAt
+ * TODO: Add @ManyToOne @NotNull User user  (owning side — FK column)
+ * TODO: Add @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealPhoto photo
+ * TODO: Add @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealAnalysis analysis
+ * TODO: Add @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealCorrection correction
  * TODO: Add @Column constraints
- * TODO: Add Lombok @Builder, @NoArgsConstructor, @AllArgsConstructor as needed
  */
 @Entity
 @Table(name = "meals")
-@Getter
-@Setter
+@Data
+@NoArgsConstructor
+@DynamicInsert
+@DynamicUpdate
 public class Meal {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: Add String imagePath (path or URL to stored image)
-    // TODO: Add LocalDateTime uploadedAt
-    // TODO: Add LocalDateTime analyzedAt
-
     @Enumerated(EnumType.STRING)
     private MealStatus status;
 
-    // TODO: Add User user (ManyToOne)
-    // TODO: Add MealAnalysis analysis (OneToOne)
-    // TODO: Add MealCorrection correction (OneToOne)
+    // TODO: @CreationTimestamp LocalDateTime uploadedAt
+    // TODO: @UpdateTimestamp LocalDateTime updatedAt
+    // TODO: @ManyToOne @NotNull User user
+    // TODO: @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealPhoto photo
+    // TODO: @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealAnalysis analysis
+    // TODO: @OneToOne(mappedBy = "meal", cascade = CascadeType.REMOVE) @ToString.Exclude MealCorrection correction
 }

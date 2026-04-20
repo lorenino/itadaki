@@ -1,17 +1,16 @@
 package fr.esgi.hla.itadaki.repository;
 
 import fr.esgi.hla.itadaki.business.Meal;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
 
 /**
- * TODO: Repository for Meal entity.
- *       Custom queries to add:
- *       - findAllByUserId(Long userId, Pageable pageable) → Page<Meal>
- *       - findAllByUserIdAndUploadedAtBetween(...) → for date-range history
- *       - countByUserId(Long userId) → long
+ * Repository for Meal entity. Spring Data detects this automatically — no @Repository needed.
+ * TODO: Page<Meal> findAllByUserId(Long userId, Pageable pageable);
+ * TODO: List<Meal> findAllByUserIdAndUploadedAtBetween(Long userId, LocalDateTime from, LocalDateTime to);
+ * TODO: long countByUserId(Long userId);
  */
-@Repository
 public interface MealRepository extends JpaRepository<Meal, Long> {
-    // TODO: Add custom query methods listed above
+    // TODO: Add query methods listed above
 }

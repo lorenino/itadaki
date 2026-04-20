@@ -1,16 +1,18 @@
 package fr.esgi.hla.itadaki.dto.correction;
 
+import java.io.Serializable;
+
 /**
- * TODO: DTO for a single food item as corrected by the user.
- *       Similar to DetectedFoodItemDto but represents user-provided values.
- *       Fields to add: name, quantity, unit, calories, protein, carbs, fat.
+ * DTO for a single food item as corrected by the user.
+ * TODO: Validated inside MealCorrectionRequestDto list via @Valid @NotEmpty.
  */
-public class CorrectedFoodItemDto {
-    // TODO: Add String name
-    // TODO: Add Double quantity
-    // TODO: Add String unit
-    // TODO: Add Double calories
-    // TODO: Add Double protein
-    // TODO: Add Double carbs
-    // TODO: Add Double fat
+public record CorrectedFoodItemDto(
+        String name,
+        Double quantity,
+        String unit,
+        Double calories,
+        Double protein,
+        Double carbs,
+        Double fat
+) implements Serializable {
 }

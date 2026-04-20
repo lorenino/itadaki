@@ -8,36 +8,43 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * JPA entity representing an application user.
  *
- * TODO: Add remaining fields: username, email, passwordHash, createdAt, updatedAt
- * TODO: Add @OneToMany relation to Meal
- * TODO: Add @Column constraints (nullable, unique, length)
- * TODO: Implement UserDetails interface for Spring Security integration
- * TODO: Add Lombok @Builder, @NoArgsConstructor, @AllArgsConstructor as needed
+ * TODO: Add fields: username, email, passwordHash
+ * TODO: Add @CreationTimestamp LocalDateTime createdAt
+ * TODO: Add @UpdateTimestamp LocalDateTime updatedAt
+ * TODO: Add @Column(unique = true) on email and username
+ * TODO: Add @Column(nullable = false) on required fields
+ * TODO: Add @OneToMany(mappedBy = "user", cascade = CascadeType.REMOVE) List<Meal> meals
+ * TODO: Add @NotBlank / @Email / @Size validation annotations on fields
+ * TODO: Implement UserDetails for Spring Security integration
  */
 @Entity
 @Table(name = "users")
-@Getter
-@Setter
+@Data
+@NoArgsConstructor
+@DynamicInsert
+@DynamicUpdate
 public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: Add String username
-    // TODO: Add String email (unique)
-    // TODO: Add String passwordHash
-    // TODO: Add LocalDateTime createdAt
-    // TODO: Add LocalDateTime updatedAt
+    // TODO: @Column(nullable = false, unique = true) String username
+    // TODO: @Column(nullable = false, unique = true) @Email String email
+    // TODO: @Column(nullable = false) String passwordHash
 
     @Enumerated(EnumType.STRING)
     private UserRole role;
 
-    // TODO: Add List<Meal> meals relationship
+    // TODO: @CreationTimestamp LocalDateTime createdAt
+    // TODO: @UpdateTimestamp LocalDateTime updatedAt
+    // TODO: @OneToMany(mappedBy = "user", cascade = CascadeType.REMOVE) @ToString.Exclude List<Meal> meals
 }

@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.StatsService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
  *       Inject: MealAnalysisRepository, MealRepository, StatsMapper
  */
 @Service
+@RequiredArgsConstructor
 public class StatsServiceImpl implements StatsService {
 
     // TODO: Inject MealAnalysisRepository

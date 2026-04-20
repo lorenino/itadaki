@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.JwtService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
  *       Inject: (none initially — reads config from @Value)
  */
 @Service
+@RequiredArgsConstructor
 public class JwtServiceImpl implements JwtService {
 
     // TODO: @Value("${app.jwt.secret}") private String secretKey;

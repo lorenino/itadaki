@@ -1,14 +1,19 @@
 package fr.esgi.hla.itadaki.dto.user;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.io.Serializable;
+
 /**
- * TODO: DTO for returning user profile data in API responses.
- *       Fields to add: id, username, email, role, createdAt.
- *       Never expose passwordHash in this DTO.
+ * DTO for returning user profile data in API responses.
+ * Never expose passwordHash through this DTO.
+ * TODO: Map from User entity via UserMapper.
  */
-public class UserResponseDto {
-    // TODO: Add Long id
-    // TODO: Add String username
-    // TODO: Add String email
-    // TODO: Add String role
-    // TODO: Add String createdAt (ISO-8601 formatted)
+public record UserResponseDto(
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
+        String username,
+        String email,
+        String role,
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) String createdAt
+) implements Serializable {
 }

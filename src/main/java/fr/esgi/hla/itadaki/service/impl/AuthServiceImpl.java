@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.AuthService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
  *       Inject: UserRepository, PasswordEncoder, JwtService, UserMapper
  */
 @Service
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     // TODO: Inject UserRepository

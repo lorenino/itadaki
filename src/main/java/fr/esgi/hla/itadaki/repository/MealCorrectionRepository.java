@@ -2,14 +2,13 @@ package fr.esgi.hla.itadaki.repository;
 
 import fr.esgi.hla.itadaki.business.MealCorrection;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
 
 /**
- * TODO: Repository for MealCorrection entity.
- *       Custom queries to add:
- *       - findByMealId(Long mealId) → Optional<MealCorrection>
+ * Repository for MealCorrection entity. Spring Data detects this automatically — no @Repository needed.
+ * TODO: Optional<MealCorrection> findByMealId(Long mealId);
  */
-@Repository
 public interface MealCorrectionRepository extends JpaRepository<MealCorrection, Long> {
-    // TODO: Add custom query methods listed above
+    // TODO: Add query methods listed above
 }

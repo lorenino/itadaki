@@ -5,33 +5,41 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * JPA entity storing the AI analysis result for a meal.
  *
- * TODO: Add fields: detectedItems (JSON or @ElementCollection), totalCalories,
- *       totalProtein, totalCarbs, totalFat, rawAiResponse, analyzedAt
- * TODO: Add @OneToOne relation back to Meal
- * TODO: Consider storing detected food items as a JSON blob or separate table
- * TODO: Add Lombok @Builder, @NoArgsConstructor, @AllArgsConstructor as needed
+ * TODO: Add Double totalCalories
+ * TODO: Add Double totalProtein
+ * TODO: Add Double totalCarbs
+ * TODO: Add Double totalFat
+ * TODO: Add String rawAiResponse  (raw Ollama JSON output — store as TEXT column)
+ * TODO: Add @CreationTimestamp LocalDateTime analyzedAt
+ * TODO: Add @OneToOne @JoinColumn(name = "meal_id") @NotNull Meal meal  (owning side)
+ * TODO: Consider @Column(columnDefinition = "TEXT") for rawAiResponse
+ * TODO: Consider storing detected food items as a separate @ElementCollection or JSON column
  */
 @Entity
 @Table(name = "meal_analyses")
-@Getter
-@Setter
+@Data
+@NoArgsConstructor
+@DynamicInsert
+@DynamicUpdate
 public class MealAnalysis {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // TODO: Add Double totalCalories
-    // TODO: Add Double totalProtein
-    // TODO: Add Double totalCarbs
-    // TODO: Add Double totalFat
-    // TODO: Add String rawAiResponse (Ollama raw JSON output)
-    // TODO: Add LocalDateTime analyzedAt
-    // TODO: Add Meal meal (OneToOne, mappedBy or joinColumn)
+    // TODO: Double totalCalories
+    // TODO: Double totalProtein
+    // TODO: Double totalCarbs
+    // TODO: Double totalFat
+    // TODO: @Column(columnDefinition = "TEXT") String rawAiResponse
+    // TODO: @CreationTimestamp LocalDateTime analyzedAt
+    // TODO: @OneToOne @JoinColumn(name = "meal_id") @NotNull Meal meal
 }

@@ -1,12 +1,14 @@
 package fr.esgi.hla.itadaki.dto.stats;
 
+import java.io.Serializable;
+
 /**
- * TODO: DTO representing calorie intake for a single day.
- *       Fields to add: date, totalCalories, mealCount.
- *       Used in the daily breakdown endpoint of StatsController.
+ * DTO representing calorie intake for a single day.
+ * TODO: Built from aggregation query in MealAnalysisRepository or StatsServiceImpl.
  */
-public class DailyCaloriesDto {
-    // TODO: Add String date (ISO-8601 date, e.g., "2025-04-20")
-    // TODO: Add Double totalCalories
-    // TODO: Add int mealCount
+public record DailyCaloriesDto(
+        String date,
+        Double totalCalories,
+        int mealCount
+) implements Serializable {
 }

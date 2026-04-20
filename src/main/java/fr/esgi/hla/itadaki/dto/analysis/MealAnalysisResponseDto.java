@@ -1,20 +1,24 @@
 package fr.esgi.hla.itadaki.dto.analysis;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import fr.esgi.hla.itadaki.dto.meal.DetectedFoodItemDto;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
- * TODO: DTO for returning the full analysis result of a meal.
- *       Fields to add: mealId, detectedItems, totalCalories, totalProtein,
- *       totalCarbs, totalFat, analyzedAt.
+ * DTO for returning the full AI analysis result of a meal.
+ * TODO: Map from MealAnalysis entity via MealAnalysisMapper.
+ * TODO: detectedItems parsed from rawAiResponse by OllamaService.
  */
-public class MealAnalysisResponseDto {
-    // TODO: Add Long mealId
-    // TODO: Add List<DetectedFoodItemDto> detectedItems
-    // TODO: Add Double totalCalories
-    // TODO: Add Double totalProtein
-    // TODO: Add Double totalCarbs
-    // TODO: Add Double totalFat
-    // TODO: Add String analyzedAt (ISO-8601)
+public record MealAnalysisResponseDto(
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,
+        List<DetectedFoodItemDto> detectedItems,
+        Double totalCalories,
+        Double totalProtein,
+        Double totalCarbs,
+        Double totalFat,
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) String analyzedAt
+) implements Serializable {
 }

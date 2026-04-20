@@ -1,19 +1,21 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.AnalysisService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
  * TODO: Implements AnalysisService.
- *       - analyzeMeal: update meal status to ANALYSING, call OllamaService,
- *                      parse response, create MealAnalysis entity, update meal status to ANALYSED
+ *       - analyzeMeal: update meal status to ANALYSING, resolve photo path via MealPhotoService,
+ *                      call OllamaService, parse response, create MealAnalysis, update status to ANALYSED
  *       - reanalyzeMeal: delete existing analysis if any, re-run analyzeMeal
  *       - getAnalysis: fetch MealAnalysis by mealId, map to MealAnalysisResponseDto
  *
  *       Inject: MealRepository, MealAnalysisRepository, OllamaService,
- *               MealAnalysisMapper, FileStorageService
+ *               MealPhotoService, MealAnalysisMapper
  */
 @Service
+@RequiredArgsConstructor
 public class AnalysisServiceImpl implements AnalysisService {
 
     // TODO: Inject MealRepository

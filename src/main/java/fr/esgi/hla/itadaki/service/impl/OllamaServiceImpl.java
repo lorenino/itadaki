@@ -1,6 +1,7 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import fr.esgi.hla.itadaki.service.OllamaService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
  *       Inject: OllamaConfig (or @Value for base URL / model name)
  */
 @Service
+@RequiredArgsConstructor
 public class OllamaServiceImpl implements OllamaService {
 
     // TODO: Inject OllamaConfig or use @Value for base URL and model

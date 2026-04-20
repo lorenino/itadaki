@@ -1,14 +1,14 @@
 package fr.esgi.hla.itadaki.exception;
 
+import java.io.Serializable;
+
 /**
- * TODO: Standardized error response payload returned by GlobalExceptionHandler.
- *       Fields to add: timestamp, status (HTTP code), error (short label),
- *       message (detail), path (request URI).
+ * Standardized error response payload returned by GlobalExceptionHandler.
+ * Used for all API error responses — never leak stack traces.
  */
-public class ErrorResponse {
-    // TODO: Add String timestamp (ISO-8601)
-    // TODO: Add int status (HTTP status code)
-    // TODO: Add String error (e.g., "Not Found", "Bad Request")
-    // TODO: Add String message (human-readable detail)
-    // TODO: Add String path (request URI)
+public record ErrorResponse(
+        int status,
+        String message,
+        String path
+) implements Serializable {
 }
