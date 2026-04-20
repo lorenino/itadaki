@@ -178,6 +178,71 @@ Pour le parsing, 2 options :
 
 **On ne touche plus à l'infra IA.** Équipe IA (Lorenzo + Hugo) en standby : on attend la partie Java d'Ahmed pour brancher.
 
-## ⚠ Note pour le jour de la démo
+## Solution réseau démo : ngrok tunnel HTTPS
 
-Le WiFi ESGI (Campus-Sciences-U) fait de l'**AP isolation** — les clients ne peuvent pas se parler entre eux même sur le même subnet. Avant la démo, **activer un partage de connexion 4G** depuis un téléphone de l'équipe, **connecter les 3 machines dessus**, **relever la nouvelle IP de Hugo** (`ipconfig` côté Hugo), et **mettre à jour `spring.ai.ollama.base-url`** dans l'app Java avant de lancer.
+Le WiFi ESGI (`Campus-Sciences-U`) fait de l'**AP isolation** (bloque le trafic entre clients d'un même AP) — inutilisable pour parler à l'Ollama de Hugo en direct. **Solution retenue : ngrok** qui contourne le problème en sortant en HTTPS vers l'extérieur puis revient vers le PC Hugo.
+
+### Setup une fois (Hugo, ~10 min)
+
+```powershell
+# 1. Install
+winget install ngrok.ngrok
+
+# 2. Compte gratuit
+#    https://dashboard.ngrok.com/signup (Google OAuth OK)
+
+# 3. Authtoken (une seule fois, persiste)
+#    https://dashboard.ngrok.com/get-started/your-authtoken
+ngrok config add-authtoken <TOKEN>
+```
+
+### Avant chaque démo (Hugo, 2 min)
+
+```powershell
+# 1. Warm-up Ollama (charge le modèle en VRAM, ~30 s)
+ollama run qwen2.5vl:7b "ok"
+# → tape /bye après réponse
+
+# 2. Lancer le tunnel dans un terminal DÉDIÉ (NE PAS FERMER)
+ngrok http 11434
+# → copie l'URL « Forwarding https://abcd-1234.ngrok-free.app -> http://localhost:11434 »
+# → partage l'URL sur le channel équipe
+```
+
+### Test de validation (Lorenzo ou Ahmed avant la démo)
+
+```bash
+# Connectivité
+curl -H "ngrok-skip-browser-warning: any" https://abcd-1234.ngrok-free.app
+# → "Ollama is running"
+
+# Liste modèles
+curl -H "ngrok-skip-browser-warning: any" https://abcd-1234.ngrok-free.app/api/tags
+# → {"models":[{"name":"qwen2.5vl:7b",…},{"name":"gemma3:4b",…}]}
+
+# Appel chat complet
+curl -H "ngrok-skip-browser-warning: any" -H "Content-Type: application/json" \
+  https://abcd-1234.ngrok-free.app/api/chat \
+  -d '{"model":"qwen2.5vl:7b","messages":[{"role":"user","content":"Retourne {\"ok\":true}"}],"stream":false,"format":"json"}'
+```
+
+### Lancement app Spring Boot (démonstrateur)
+
+```powershell
+$env:OLLAMA_URL = "https://abcd-1234.ngrok-free.app"
+mvn spring-boot:run
+```
+
+L'`application.properties` doit contenir :
+```properties
+spring.ai.ollama.base-url=${OLLAMA_URL:http://localhost:11434}
+```
+
+### ⚠ Gotchas ngrok à connaître
+
+- **Header obligatoire** : `ngrok-skip-browser-warning: any` sur toutes les requêtes, sinon ngrok renvoie une page HTML d'avertissement que Spring AI ne peut pas parser. Ahmed doit injecter ce header dans le `RestClient` / `WebClient` utilisé par `OllamaServiceImpl`.
+- **URL change à chaque `ngrok http`** sur le plan gratuit. Ne jamais hardcoder l'URL, toujours via env var `OLLAMA_URL`.
+- **Session doit rester ouverte** : fermer le terminal ngrok coupe le tunnel → démo morte.
+- **Rate limit gratuit** : 40 req/min (largement OK pour démo).
+- **Latence tunnel** : ~200 ms additionnels par appel (acceptable, on reste sur 2-10 s au total).
+- **Cold start Ollama** : au-delà de 5 min d'inactivité, le modèle se décharge. Refaire warm-up avant la démo si on attend plus de 5 min entre la prépa et le pitch.
