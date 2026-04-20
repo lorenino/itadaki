@@ -1,6 +1,30 @@
 # 🚀 Setup Ollama + ngrok + Spring Boot
 
-**Infrastructure IA locale — Chaque commande séparée et copiable**
+**Infrastructure IA locale — Commandes avec PATH correct**
+
+---
+
+## 📋 Prérequis
+
+- ✅ Java 21+
+- ✅ Maven 3.8+
+- ✅ GNU Make (télécharger ou installer)
+- ✅ Ollama
+- ✅ ngrok
+
+---
+
+## 🚀 UTILISATION RAPIDE
+
+```bash
+make run
+```
+
+Cela lance un menu interactif avec 3 options :
+
+1. **TOUT EN LOCAL** - Ollama + Spring Boot
+2. **APP SEULE** - Seulement Spring Boot (si Ollama déjà lancé)
+3. **OLLAMA + NGROK SEULS** - Pour partager avec une autre machine
 
 ---
 
@@ -56,35 +80,31 @@ winget install ollama.ollama
 
 ## 🎯 Terminal 1 : Lancer Ollama en serveur
 
-**Ouvre un nouveau Terminal PowerShell.**
+**Copie et colle :**
 
-**Copie et colle la 1ère commande :**
+```powershell
+$env:PATH += ";C:\Users\letai\AppData\Local\Programs\Ollama"
+```
+
+**Puis :**
 
 ```powershell
 $env:OLLAMA_HOST = "0.0.0.0:11434"
 ```
 
-**Appuie sur ENTRÉE.**
-
----
-
-**Puis copie et colle la 2e commande :**
+**Puis :**
 
 ```powershell
 ollama serve
 ```
 
-**Appuie sur ENTRÉE et attends que tu voies :**
+✅ **Ollama actif sur http://localhost:11434**
 
+**OU utilise le script automatique :**
+
+```powershell
+. automation/start-ollama.ps1
 ```
-Connected to a running Ollama instance
-```
-
-✅ **Ollama est maintenant actif sur :**
-- 📍 Local : `http://localhost:11434`
-- 🌐 Réseau : `http://<ton-ip>:11434`
-
-**⚠️ NE FERME PAS ce terminal — laisse-le tourner**
 
 ---
 
@@ -92,34 +112,31 @@ Connected to a running Ollama instance
 
 ## 📥 Terminal 2 : Télécharger le modèle IA
 
-**Ouvre un NOUVEAU Terminal PowerShell (ne ferme pas Terminal 1).**
+**Copie et colle :**
 
-**Copie et colle cette commande seule :**
+```powershell
+$env:PATH += ";C:\Users\letai\AppData\Local\Programs\Ollama"
+```
+
+**Puis :**
 
 ```powershell
 ollama pull qwen2.5vl:7b
 ```
 
-**Appuie sur ENTRÉE et attends** ⏳ (10-15 minutes, 6 GB)
+⏳ **Attends 10-15 minutes (6 GB)**
 
-Tu verras :
-```
-pulling manifest
-pulling 1234abc...
-pulling 5678def...
-...
-✓ Success
-```
-
----
-
-**Une fois terminé, copie et colle cette commande pour vérifier :**
+✅ **Quand c'est fini :**
 
 ```powershell
 ollama list
 ```
 
-✅ **Tu devrais voir :** `qwen2.5vl:7b`
+**OU utilise le script :**
+
+```powershell
+. automation/download-model.ps1
+```
 
 ---
 
@@ -178,15 +195,11 @@ ngrok config add-authtoken <COLLE_TON_TOKEN_ICI>
 
 ## 🚇 Terminal 3 : Lancer le tunnel ngrok
 
-**Ouvre un NOUVEAU Terminal PowerShell (ne ferme pas T1 et T2).**
-
-**Copie et colle cette commande seule :**
+**Copie et colle :**
 
 ```powershell
 ngrok http 11434
 ```
-
-**Appuie sur ENTRÉE.**
 
 Tu devrais voir :
 ```
@@ -194,10 +207,13 @@ Session Status      online
 Forwarding          https://xxxx-yyyy-zzzz.ngrok-free.app -> http://localhost:11434
 ```
 
-📝 **NOTE L'URL HTTPS complète** → Tu en auras besoin plus tard
-(Exemple : `https://xxxx-yyyy-zzzz.ngrok-free.app`)
+📝 **NOTE L'URL HTTPS** 
 
-**⚠️ NE FERME PAS ce terminal**
+**OU utilise le script :**
+
+```powershell
+. automation/start-ngrok.ps1
+```
 
 ---
 
