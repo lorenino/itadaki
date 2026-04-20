@@ -7,14 +7,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * TODO: Custom annotation to inject the currently authenticated user
- *       into controller method parameters.
- *       Will be used with a HandlerMethodArgumentResolver to resolve
- *       the principal from the SecurityContext into a User/UserResponseDto.
+ * Custom annotation to inject the currently authenticated user ID into controller method parameters.
+ * Used with a HandlerMethodArgumentResolver to resolve the user ID from the SecurityContext.
  */
 @Documented
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface CurrentUser {
-    // TODO: No attributes needed — marker annotation only
+    // Marker annotation — no attributes needed
 }

@@ -11,9 +11,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * TODO: Bean Validation constraint annotation for validating uploaded image files.
- *       Will be backed by {@link ImageFileValidator}.
- *       Checks MIME type, file size limits, and allowed extensions (jpg, png, webp, etc.).
+ * Bean Validation constraint annotation for validating uploaded image files.
+ * Backed by ImageFileValidator which checks MIME type, file size, and extension.
  */
 @Documented
 @Constraint(validatedBy = ImageFileValidator.class)
@@ -21,8 +20,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ValidImageFile {
 
-    // TODO: Customize default message
-    String message() default "Invalid image file";
+    String message() default "Invalid image file: unsupported type or size";
 
     Class<?>[] groups() default {};
 

@@ -5,25 +5,61 @@ import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
- * TODO: ConstraintValidator implementation for @ValidImageFile.
- *       Validation rules to implement:
- *       - File must not be null or empty
- *       - Content type must be one of: image/jpeg, image/png, image/webp
- *       - File size must not exceed configured maximum (e.g., 10MB)
+ * ConstraintValidator implementation for @ValidImageFile.
+ * Validates uploaded image files based on content type and size constraints.
  */
 public class ImageFileValidator implements ConstraintValidator<ValidImageFile, MultipartFile> {
 
-    // TODO: @Value or constructor injection for max file size and allowed types
+    private static final Set<String> ALLOWED_TYPES = new HashSet<>();
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+    static {
+        ALLOWED_TYPES.add("image/jpeg");
+        ALLOWED_TYPES.add("image/png");
+        ALLOWED_TYPES.add("image/webp");
+    }
 
     @Override
     public void initialize(ValidImageFile constraintAnnotation) {
-        // TODO: Read configuration from annotation attributes if needed
+        // No initialization needed
     }
 
     @Override
     public boolean isValid(MultipartFile file, ConstraintValidatorContext context) {
-        // TODO: Implement validation logic
-        return false; // placeholder — replace with real logic
+        // Allow null — @NotNull handles null separately
+        if (file == null) {
+            return true;
+        }
+
+        // Check file is not empty
+        if (file.isEmpty()) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("File must not be empty")
+                    .addConstraintViolation();
+            return false;
+        }
+
+        // Check content type
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_TYPES.contains(contentType.toLowerCase())) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("File type not allowed. Allowed types: JPEG, PNG, WebP")
+                    .addConstraintViolation();
+            return false;
+        }
+
+        // Check file size
+        if (file.getSize() > MAX_FILE_SIZE) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("File size exceeds maximum limit of 10MB")
+                    .addConstraintViolation();
+            return false;
+        }
+
+        return true;
     }
 }

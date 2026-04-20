@@ -1,30 +1,63 @@
 package fr.esgi.hla.itadaki.config;
 
+import fr.esgi.hla.itadaki.security.CustomUserDetailsService;
+import fr.esgi.hla.itadaki.security.JwtAuthenticationEntryPoint;
+import fr.esgi.hla.itadaki.security.JwtAuthenticationFilter;
+import fr.esgi.hla.itadaki.security.SecurityConstants;
+import fr.esgi.hla.itadaki.service.JwtService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * TODO: Spring Security configuration.
- *       - Define SecurityFilterChain bean:
- *           * Disable CSRF (stateless JWT API)
- *           * Configure public endpoints: /api/auth/**, /h2-console/**, /swagger-ui/**, /v3/api-docs/**
- *           * Require authentication for all other endpoints
- *           * Add JwtAuthenticationFilter before UsernamePasswordAuthenticationFilter
- *           * Set session management to STATELESS
- *       - Define PasswordEncoder bean (BCryptPasswordEncoder)
- *       - Define AuthenticationManager bean
- *       - Define AuthenticationProvider bean (DaoAuthenticationProvider)
- *
- *       Inject: CustomUserDetailsService, JwtAuthenticationFilter, JwtAuthenticationEntryPoint
+ * Spring Security configuration.
+ * Configures stateless JWT-based authentication, CORS, and public URL exemptions.
  */
 @Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-    // TODO: Inject CustomUserDetailsService
-    // TODO: Inject JwtAuthenticationFilter
-    // TODO: Inject JwtAuthenticationEntryPoint
+    private final CustomUserDetailsService userDetailsService;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtService jwtService;
 
-    // TODO: @Bean SecurityFilterChain securityFilterChain(HttpSecurity http)
-    // TODO: @Bean PasswordEncoder passwordEncoder()
-    // TODO: @Bean AuthenticationManager authenticationManager(AuthenticationConfiguration config)
-    // TODO: @Bean AuthenticationProvider authenticationProvider()
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter(jwtService, userDetailsService);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(SecurityConstants.PUBLIC_URLS).permitAll()
+                        .anyRequest().authenticated()
+                )
+                .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
 }

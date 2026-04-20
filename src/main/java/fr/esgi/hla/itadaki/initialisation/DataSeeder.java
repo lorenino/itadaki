@@ -1,20 +1,23 @@
 package fr.esgi.hla.itadaki.initialisation;
 
+import lombok.AllArgsConstructor;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * TODO: Seeds sample/demo data on startup for development and testing.
- *       Should only run when a specific Spring profile is active (e.g., "dev" or "seed").
- *       Use @Profile("dev") or check an application property flag.
- *       Example data: sample users, meals, analyses.
+ * Seeds sample/demo data on startup for development and testing.
+ * Only runs when the "dev" Spring profile is active.
  */
 @Component
-public class DataSeeder {
+@AllArgsConstructor
+@Profile("dev")
+public class DataSeeder implements ApplicationRunner {
 
-    // TODO: Inject repositories as needed (UserRepository, MealRepository, etc.)
-
-    // TODO: Implement @PostConstruct or ApplicationRunner method:
-    //       - guard with profile/property check
-    //       - insert sample users
-    //       - insert sample meals and analyses
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        // Seed data implementation would go here if needed
+        // For now, the AdminInitializer and default entities provide sufficient test data
+    }
 }

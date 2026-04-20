@@ -1,23 +1,27 @@
 package fr.esgi.hla.itadaki.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * TODO: CORS configuration for the REST API.
- *       - Allow requests from frontend origin(s) (configurable via application.properties)
- *       - Allow headers: Authorization, Content-Type
- *       - Allow methods: GET, POST, PUT, DELETE, OPTIONS
- *       - Expose header: Authorization
- *       - Configure max age for preflight caching
- *
- *       Implement WebMvcConfigurer.addCorsMappings() or define CorsConfigurationSource bean.
+ * CORS configuration for the REST API.
+ * Allows cross-origin requests from configured frontend origins with proper headers.
  */
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    // TODO: @Value("${app.cors.allowed-origins}") private String[] allowedOrigins;
+    @Value("${app.cors.allowed-origins}")
+    private String[] allowedOrigins;
 
-    // TODO: @Override addCorsMappings(CorsRegistry registry)
-    //       - registry.addMapping("/api/**").allowedOrigins(...).allowedMethods(...)
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins(allowedOrigins)
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .allowedHeaders("Authorization", "Content-Type")
+                .exposedHeaders("Authorization")
+                .maxAge(3600);
+    }
 }

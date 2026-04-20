@@ -1,21 +1,24 @@
 package fr.esgi.hla.itadaki.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.context.annotation.Bean;
 
 /**
- * TODO: Configuration to allow access to the H2 web console during development.
- *       The H2 console uses frames, which Spring Security blocks by default.
- *       - Permit /h2-console/** in SecurityConfig (see SecurityConfig TODO)
- *       - Disable frameOptions for the H2 console path (X-Frame-Options: SAMEORIGIN)
- *       This config class may host H2-specific beans or simply document the
- *       security adjustments required in SecurityConfig for H2 console access.
+ * Configuration to allow access to the H2 web console during development.
+ * The H2 console uses frames, which Spring Security blocks by default.
+ * This config permits /h2-console/** paths for development use.
  *
- *       Note: H2 console should only be enabled in dev/test profiles.
- *       Properties: spring.h2.console.enabled=true (already in application.properties)
+ * Only active in dev profile to prevent console exposure in production.
  */
 @Configuration
+@Profile("dev")
 public class H2ConsoleConfig {
 
-    // TODO: Document or encapsulate H2 console security adjustments
-    // TODO: Consider @Profile("dev") to restrict this config to dev environment only
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers("/h2-console/**");
+    }
 }

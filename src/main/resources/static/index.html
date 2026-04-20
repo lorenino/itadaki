@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Itadaki — Analyse nutritionnelle</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-card">
+            <h1 class="logo">いただき<span>Itadaki</span></h1>
+            <p class="tagline">Analyse nutritionnelle par IA</p>
+
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="showTab('login-tab', this)">Connexion</button>
+                <button class="tab-btn" onclick="showTab('register-tab', this)">Inscription</button>
+            </div>
+
+            <div id="login-tab" class="tab-panel active">
+                <form id="login-form" onsubmit="login(event)">
+                    <input type="email" id="login-email" placeholder="Email" required>
+                    <input type="password" id="login-password" placeholder="Mot de passe" required>
+                    <button type="submit" class="btn-primary">Se connecter</button>
+                </form>
+            </div>
+
+            <div id="register-tab" class="tab-panel">
+                <form id="register-form" onsubmit="register(event)">
+                    <input type="text" id="reg-username" placeholder="Nom d'utilisateur" required>
+                    <input type="email" id="reg-email" placeholder="Email" required>
+                    <input type="password" id="reg-password" placeholder="Mot de passe (8+ car.)" required minlength="8">
+                    <button type="submit" class="btn-primary">S'inscrire</button>
+                </form>
+            </div>
+
+            <div id="auth-error" class="error-msg hidden"></div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-screen" class="screen hidden">
+        <header>
+            <span class="logo-small">いただき Itadaki</span>
+            <div class="header-right">
+                <span id="user-label"></span>
+                <button class="btn-ghost" onclick="logout()">Déconnexion</button>
+            </div>
+        </header>
+
+        <nav class="nav-bar">
+            <button class="nav-btn active" onclick="showView('upload-view', this)">📸 Analyser</button>
+            <button class="nav-btn" onclick="showView('history-view', this)">📋 Historique</button>
+            <button class="nav-btn" onclick="showView('stats-view', this)">📊 Statistiques</button>
+        </nav>
+
+        <!-- UPLOAD / ANALYZE VIEW -->
+        <div id="upload-view" class="view">
+            <div class="card">
+                <h2>Analyser un repas</h2>
+                <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()">
+                    <img id="preview-img" class="hidden" alt="Aperçu">
+                    <div id="drop-placeholder">
+                        <span class="icon">📷</span>
+                        <p>Cliquez ou déposez une photo ici</p>
+                        <p class="hint">JPEG / PNG / WEBP — max 10 MB</p>
+                    </div>
+                </div>
+                <input type="file" id="file-input" accept="image/*" onchange="previewFile(this)" hidden>
+                <button id="upload-btn" class="btn-primary" onclick="uploadMeal()" disabled>Analyser le repas</button>
+                <div id="upload-error" class="error-msg hidden"></div>
+            </div>
+
+            <div id="analysis-card" class="card hidden">
+                <h2>Résultat de l'analyse</h2>
+                <div class="analysis-grid">
+                    <div class="stat-box">
+                        <span class="stat-label">Plat détecté</span>
+                        <span id="res-dish" class="stat-value">—</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Calories estimées</span>
+                        <span id="res-calories" class="stat-value">—</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Confiance</span>
+                        <span id="res-confidence" class="stat-value">—</span>
+                    </div>
+                </div>
+                <div id="res-items" class="items-list"></div>
+                <div class="correction-form">
+                    <h3>Corriger l'analyse</h3>
+                    <input type="text" id="correction-dish" placeholder="Nom du plat corrigé">
+                    <input type="number" id="correction-calories" placeholder="Calories corrigées">
+                    <textarea id="correction-comment" placeholder="Commentaire (optionnel)" rows="2"></textarea>
+                    <button class="btn-secondary" onclick="submitCorrection()">Envoyer la correction</button>
+                </div>
+                <div id="correction-msg" class="success-msg hidden"></div>
+            </div>
+
+            <div id="loading-overlay" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Analyse en cours…</p>
+            </div>
+        </div>
+
+        <!-- HISTORY VIEW -->
+        <div id="history-view" class="view hidden">
+            <div class="card">
+                <div class="view-header">
+                    <h2>Historique des repas</h2>
+                    <input type="date" id="history-date-filter" onchange="filterByDate(this.value)">
+                </div>
+                <div id="history-list" class="history-list"></div>
+                <div class="pagination">
+                    <button class="btn-ghost" id="prev-btn" onclick="changePage(-1)" disabled>← Précédent</button>
+                    <span id="page-label">Page 1</span>
+                    <button class="btn-ghost" id="next-btn" onclick="changePage(1)">Suivant →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATS VIEW -->
+        <div id="stats-view" class="view hidden">
+            <div class="stats-grid">
+                <div class="card stat-card">
+                    <span class="stat-label">Total repas</span>
+                    <span id="st-meals" class="stat-big">—</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="stat-label">Total calories</span>
+                    <span id="st-total-cal" class="stat-big">—</span>
+                </div>
+                <div class="card stat-card">
+                    <span class="stat-label">Moy. journalière</span>
+                    <span id="st-avg-cal" class="stat-big">—</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Calories par jour (30 derniers jours)</h2>
+                <div id="daily-chart" class="daily-chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
