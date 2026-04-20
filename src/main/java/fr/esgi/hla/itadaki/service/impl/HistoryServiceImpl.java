@@ -1,23 +1,38 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import fr.esgi.hla.itadaki.dto.meal.MealHistoryItemDto;
+import fr.esgi.hla.itadaki.mapper.MealMapper;
+import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.HistoryService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.util.List;
+
 /**
- * TODO: Implements HistoryService.
- *       - getHistory: paginated query of meals by userId, map to MealHistoryItemDto list
- *       - getHistoryByDate: filter meals by userId and specific date, map to list
- *
- *       Inject: MealRepository, MealMapper
+ * Implementation of HistoryService.
+ * Retrieves paginated and date-filtered meal history for users.
  */
 @Service
 @RequiredArgsConstructor
 public class HistoryServiceImpl implements HistoryService {
 
-    // TODO: Inject MealRepository
-    // TODO: Inject MealMapper
+    private final MealRepository mealRepository;
+    private final MealMapper mealMapper;
 
-    // TODO: Override getHistory(Long userId, Pageable pageable) → Page<MealHistoryItemDto>
-    // TODO: Override getHistoryByDate(Long userId, LocalDate date) → List<MealHistoryItemDto>
+    @Override
+    public Page<MealHistoryItemDto> getHistory(Long userId, Pageable pageable) {
+        return mealRepository.findAllByUserId(userId, pageable)
+                .map(mealMapper::toHistoryItemDto);
+    }
+
+    @Override
+    public List<MealHistoryItemDto> getHistoryByDate(Long userId, LocalDate date) {
+        return mealMapper.toHistoryItemDto(
+                mealRepository.findByUserIdAndDate(userId, date)
+        );
+    }
 }

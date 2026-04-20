@@ -1,29 +1,221 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import fr.esgi.hla.itadaki.business.Meal;
+import fr.esgi.hla.itadaki.business.MealAnalysis;
+import fr.esgi.hla.itadaki.business.enums.MealStatus;
+import fr.esgi.hla.itadaki.dto.analysis.MealAnalysisResponseDto;
+import fr.esgi.hla.itadaki.dto.analysis.ReanalyzeRequestDto;
+import fr.esgi.hla.itadaki.dto.meal.DetectedFoodItemDto;
+import fr.esgi.hla.itadaki.exception.MealAnalysisException;
+import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
+import fr.esgi.hla.itadaki.mapper.MealAnalysisMapper;
+import fr.esgi.hla.itadaki.repository.MealAnalysisRepository;
+import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.AnalysisService;
+import fr.esgi.hla.itadaki.service.MealPhotoService;
+import fr.esgi.hla.itadaki.service.OllamaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * TODO: Implements AnalysisService.
- *       - analyzeMeal: update meal status to ANALYSING, resolve photo path via MealPhotoService,
- *                      call OllamaService, parse response, create MealAnalysis, update status to ANALYSED
- *       - reanalyzeMeal: delete existing analysis if any, re-run analyzeMeal
- *       - getAnalysis: fetch MealAnalysis by mealId, map to MealAnalysisResponseDto
- *
- *       Inject: MealRepository, MealAnalysisRepository, OllamaService,
- *               MealPhotoService, MealAnalysisMapper
+ * Implementation of AnalysisService.
+ * Orchestrates meal image analysis via Ollama with JSON response parsing.
  */
 @Service
 @RequiredArgsConstructor
 public class AnalysisServiceImpl implements AnalysisService {
 
-    // TODO: Inject MealRepository
-    // TODO: Inject MealAnalysisRepository
-    // TODO: Inject OllamaService
-    // TODO: Inject MealAnalysisMapper
+    private final MealRepository mealRepository;
+    private final MealAnalysisRepository mealAnalysisRepository;
+    private final OllamaService ollamaService;
+    private final MealPhotoService mealPhotoService;
+    private final MealAnalysisMapper mealAnalysisMapper;
+    private final ObjectMapper objectMapper;
 
-    // TODO: Override analyzeMeal(Long mealId) → MealAnalysisResponseDto
-    // TODO: Override reanalyzeMeal(Long mealId, ReanalyzeRequestDto request) → MealAnalysisResponseDto
-    // TODO: Override getAnalysis(Long mealId) → MealAnalysisResponseDto
+    @Override
+    public MealAnalysisResponseDto analyzeMeal(Long mealId) {
+        // Fetch meal and verify it exists
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+
+        // Update status to ANALYSING
+        meal.setStatus(MealStatus.ANALYSING);
+        mealRepository.save(meal);
+
+        try {
+            // Get stored path from MealPhotoService
+            String imagePath = mealPhotoService.getStoredPath(mealId);
+
+            // Build prompt and call Ollama
+            String prompt = ollamaService.buildMealAnalysisPrompt(null);
+            String rawResponse = ollamaService.analyzeImage(imagePath, prompt);
+
+            // Parse JSON response
+            JsonNode jsonNode = objectMapper.readTree(rawResponse);
+
+            // Create MealAnalysis entity
+            MealAnalysis analysis = new MealAnalysis();
+            analysis.setMeal(meal);
+            analysis.setDetectedDishName(extractString(jsonNode, "nomPlat"));
+            analysis.setDetectedItemsJson(rawResponse);
+            analysis.setEstimatedTotalCalories(extractCalories(jsonNode));
+            analysis.setConfidenceScore(parseConfidence(extractString(jsonNode, "confiance")));
+            analysis.setRawModelResponse(rawResponse);
+
+            analysis = mealAnalysisRepository.save(analysis);
+
+            // Update meal status to ANALYSED
+            meal.setStatus(MealStatus.ANALYSED);
+            mealRepository.save(meal);
+
+            // Map to DTO and enrich with parsed items
+            MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
+            List<DetectedFoodItemDto> detectedItems = parseDetectedItems(rawResponse);
+
+            return new MealAnalysisResponseDto(
+                    dto.id(),
+                    dto.mealId(),
+                    dto.detectedDishName(),
+                    detectedItems,
+                    dto.estimatedTotalCalories(),
+                    dto.confidenceScore(),
+                    dto.analyzedAt()
+            );
+        } catch (Exception ex) {
+            // Update meal status to FAILED
+            meal.setStatus(MealStatus.FAILED);
+            mealRepository.save(meal);
+            throw new MealAnalysisException("Analysis failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public MealAnalysisResponseDto reanalyzeMeal(Long mealId, ReanalyzeRequestDto request) {
+        // Delete existing analysis if any
+        mealAnalysisRepository.deleteByMealId(mealId);
+
+        // Re-run analysis with hint
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+
+        meal.setStatus(MealStatus.ANALYSING);
+        mealRepository.save(meal);
+
+        try {
+            String imagePath = mealPhotoService.getStoredPath(mealId);
+            String prompt = ollamaService.buildMealAnalysisPrompt(request.hint());
+            String rawResponse = ollamaService.analyzeImage(imagePath, prompt);
+
+            JsonNode jsonNode = objectMapper.readTree(rawResponse);
+
+            MealAnalysis analysis = new MealAnalysis();
+            analysis.setMeal(meal);
+            analysis.setDetectedDishName(extractString(jsonNode, "nomPlat"));
+            analysis.setDetectedItemsJson(rawResponse);
+            analysis.setEstimatedTotalCalories(extractCalories(jsonNode));
+            analysis.setConfidenceScore(parseConfidence(extractString(jsonNode, "confiance")));
+            analysis.setRawModelResponse(rawResponse);
+
+            analysis = mealAnalysisRepository.save(analysis);
+
+            meal.setStatus(MealStatus.ANALYSED);
+            mealRepository.save(meal);
+
+            MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
+            List<DetectedFoodItemDto> detectedItems = parseDetectedItems(rawResponse);
+
+            return new MealAnalysisResponseDto(
+                    dto.id(),
+                    dto.mealId(),
+                    dto.detectedDishName(),
+                    detectedItems,
+                    dto.estimatedTotalCalories(),
+                    dto.confidenceScore(),
+                    dto.analyzedAt()
+            );
+        } catch (Exception ex) {
+            meal.setStatus(MealStatus.FAILED);
+            mealRepository.save(meal);
+            throw new MealAnalysisException("Re-analysis failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public MealAnalysisResponseDto getAnalysis(Long mealId) {
+        MealAnalysis analysis = mealAnalysisRepository.findByMealId(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Analysis not found for meal id: " + mealId));
+
+        MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
+        List<DetectedFoodItemDto> detectedItems = parseDetectedItems(analysis.getDetectedItemsJson());
+
+        return new MealAnalysisResponseDto(
+                dto.id(),
+                dto.mealId(),
+                dto.detectedDishName(),
+                detectedItems,
+                dto.estimatedTotalCalories(),
+                dto.confidenceScore(),
+                dto.analyzedAt()
+        );
+    }
+
+    private String extractString(JsonNode node, String field) {
+        if (node.has(field) && !node.get(field).isNull()) {
+            return node.get(field).asText();
+        }
+        return null;
+    }
+
+    private Double extractCalories(JsonNode node) {
+        try {
+            if (node.has("caloriesMax") && !node.get("caloriesMax").isNull()) {
+                return node.get("caloriesMax").asDouble();
+            }
+        } catch (Exception ex) {
+            // Ignore parsing errors
+        }
+        return null;
+    }
+
+    private Double parseConfidence(String confidence) {
+        if (confidence == null) {
+            return 0.5;
+        }
+        return switch (confidence.toLowerCase()) {
+            case "haute" -> 0.9;
+            case "moyenne" -> 0.5;
+            case "basse" -> 0.2;
+            default -> 0.5;
+        };
+    }
+
+    private List<DetectedFoodItemDto> parseDetectedItems(String jsonString) {
+        List<DetectedFoodItemDto> items = new ArrayList<>();
+        try {
+            JsonNode node = objectMapper.readTree(jsonString);
+            if (node.has("ingredients") && node.get("ingredients").isArray()) {
+                for (JsonNode ingredient : node.get("ingredients")) {
+                    // For now, create simple items from ingredient names
+                    DetectedFoodItemDto item = new DetectedFoodItemDto(
+                            ingredient.asText(),
+                            1.0,
+                            "portion",
+                            null,
+                            null,
+                            null,
+                            null
+                    );
+                    items.add(item);
+                }
+            }
+        } catch (Exception ex) {
+            // If parsing fails, return empty list
+        }
+        return items;
+    }
 }

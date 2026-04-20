@@ -1,30 +1,86 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import fr.esgi.hla.itadaki.business.Meal;
+import fr.esgi.hla.itadaki.business.MealPhoto;
+import fr.esgi.hla.itadaki.dto.meal.MealPhotoResponseDto;
+import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
+import fr.esgi.hla.itadaki.mapper.MealPhotoMapper;
+import fr.esgi.hla.itadaki.repository.MealPhotoRepository;
+import fr.esgi.hla.itadaki.repository.MealRepository;
+import fr.esgi.hla.itadaki.service.FileStorageService;
 import fr.esgi.hla.itadaki.service.MealPhotoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.UUID;
 
 /**
- * TODO: Implements MealPhotoService.
- *       - storePhoto: call FileStorageService.store(), create MealPhoto entity
- *                     (originalFilename, storedPath, mimeType, fileSizeBytes), link to Meal
- *       - findByMealId: fetch MealPhoto by meal ID, map to MealPhotoResponseDto
- *       - deleteByMealId: load MealPhoto, call FileStorageService.delete(storedPath), delete entity
- *       - getStoredPath: fetch MealPhoto by meal ID, return storedPath
- *
- *       Inject: MealPhotoRepository, MealRepository, FileStorageService, MealPhotoMapper
+ * Implementation of MealPhotoService.
+ * Handles photo storage, retrieval, and deletion with filesystem integration.
  */
 @Service
 @RequiredArgsConstructor
 public class MealPhotoServiceImpl implements MealPhotoService {
 
-    // TODO: Inject MealPhotoRepository
-    // TODO: Inject MealRepository
-    // TODO: Inject FileStorageService
-    // TODO: Inject MealPhotoMapper
+    private final MealPhotoRepository mealPhotoRepository;
+    private final MealRepository mealRepository;
+    private final FileStorageService fileStorageService;
+    private final MealPhotoMapper mealPhotoMapper;
 
-    // TODO: Override storePhoto(MultipartFile file, Long mealId) → MealPhotoResponseDto
-    // TODO: Override findByMealId(Long mealId) → MealPhotoResponseDto
-    // TODO: Override deleteByMealId(Long mealId) → void
-    // TODO: Override getStoredPath(Long mealId) → String
+    @Override
+    public MealPhotoResponseDto storePhoto(MultipartFile file, Long mealId) {
+        // Verify meal exists
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+
+        // Store file via FileStorageService
+        String storagePath = fileStorageService.store(file);
+
+        // Create MealPhoto entity
+        MealPhoto photo = new MealPhoto();
+        photo.setMeal(meal);
+        photo.setOriginalFileName(file.getOriginalFilename());
+        photo.setFileName(UUID.randomUUID().toString() + getFileExtension(file.getOriginalFilename()));
+        photo.setStoragePath(storagePath);
+        photo.setContentType(file.getContentType());
+        photo.setSize(file.getSize());
+
+        photo = mealPhotoRepository.save(photo);
+
+        return mealPhotoMapper.toDto(photo);
+    }
+
+    @Override
+    public MealPhotoResponseDto findByMealId(Long mealId) {
+        MealPhoto photo = mealPhotoRepository.findByMealId(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Photo not found for meal id: " + mealId));
+        return mealPhotoMapper.toDto(photo);
+    }
+
+    @Override
+    public void deleteByMealId(Long mealId) {
+        MealPhoto photo = mealPhotoRepository.findByMealId(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Photo not found for meal id: " + mealId));
+
+        // Delete file from filesystem
+        fileStorageService.delete(photo.getStoragePath());
+
+        // Delete entity
+        mealPhotoRepository.deleteByMealId(mealId);
+    }
+
+    @Override
+    public String getStoredPath(Long mealId) {
+        MealPhoto photo = mealPhotoRepository.findByMealId(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Photo not found for meal id: " + mealId));
+        return photo.getStoragePath();
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null || !filename.contains(".")) {
+            return "";
+        }
+        return filename.substring(filename.lastIndexOf("."));
+    }
 }

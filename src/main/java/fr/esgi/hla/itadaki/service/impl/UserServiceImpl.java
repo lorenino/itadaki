@@ -1,23 +1,35 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import fr.esgi.hla.itadaki.dto.user.UserResponseDto;
+import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
+import fr.esgi.hla.itadaki.mapper.UserMapper;
+import fr.esgi.hla.itadaki.repository.UserRepository;
 import fr.esgi.hla.itadaki.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * TODO: Implements UserService.
- *       - findById: fetch user from UserRepository, map to UserResponseDto
- *       - findByEmail: fetch user from UserRepository by email, map to UserResponseDto
- *
- *       Inject: UserRepository, UserMapper
+ * Implementation of UserService.
+ * Handles user profile retrieval by ID or email.
  */
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    // TODO: Inject UserRepository
-    // TODO: Inject UserMapper
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
 
-    // TODO: Override findById(Long id) → UserResponseDto
-    // TODO: Override findByEmail(String email) → UserResponseDto
+    @Override
+    public UserResponseDto findById(Long id) {
+        return userRepository.findById(id)
+                .map(userMapper::toDto)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+    }
+
+    @Override
+    public UserResponseDto findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .map(userMapper::toDto)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+    }
 }
