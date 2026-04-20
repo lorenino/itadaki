@@ -69,3 +69,15 @@ CONVENTIONS.md
 
 itadaki.lock.db
 .gitnexus
+
+# Artefacts locaux dev (pas a committer)
+AGENTS.md
+CLAUDE.md
+_front_source/
+itadaki.zip
+image.png
+spring-run.log
+.playwright-mcp/
+uploads/
+data/
+
