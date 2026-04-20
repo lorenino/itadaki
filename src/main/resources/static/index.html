@@ -75,22 +75,15 @@
           const res = await fetch(path);
           if (!res.ok) throw new Error('HTTP ' + res.status + ' pour ' + path);
           const src = await res.text();
-          const { code } = Babel.transform(src, {
-            presets: ['react'],
-            filename: path,
-          });
-          // Injection dans le DOM via <script> pour exécuter dans le scope global
-          // (garantit que les variables déclarées sont visibles par les fichiers suivants)
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            // Blob URL pour pouvoir avoir un nom de fichier dans les devtools
-            const blob = new Blob([code], { type: 'application/javascript' });
-            const url = URL.createObjectURL(blob);
-            script.src = url;
-            script.onload = () => { URL.revokeObjectURL(url); resolve(); };
-            script.onerror = (e) => { URL.revokeObjectURL(url); reject(new Error('Échec exécution ' + path)); };
-            document.head.appendChild(script);
-          });
+          const result = Babel.transform(src, { presets: ['react'], filename: path });
+          const code = result && result.code;
+          if (!code) throw new Error('Babel n\'a pas retourne de code pour ' + path);
+          // textContent => execution synchrone dans le scope global lors de l'insertion.
+          // Pas de Blob URL (cross-browser incoherent avec Babel Standalone).
+          const script = document.createElement('script');
+          script.setAttribute('data-source', path);
+          script.textContent = code + '\n//# sourceURL=' + path;
+          document.head.appendChild(script);
         }
         // Tout est chargé — cache le splash
         document.getElementById('splash').style.display = 'none';

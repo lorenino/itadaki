@@ -3,7 +3,11 @@ package fr.esgi.hla.itadaki.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ReactorClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import reactor.netty.http.client.HttpClient;
+
+import java.time.Duration;
 
 /**
  * Ollama AI integration configuration.
@@ -16,6 +20,9 @@ import org.springframework.web.client.RestClient;
  *   <li>the {@code ngrok-skip-browser-warning} header injected on every
  *       outbound request, so the free-tier ngrok warning HTML page never
  *       reaches our JSON parser</li>
+ *   <li>a 3-minute response timeout to tolerate Ollama cold starts (~50 s
+ *       loading the model into VRAM the first time) plus the analysis latency
+ *       (5-15 s warm)</li>
  * </ul>
  *
  * Consumed by {@code OllamaServiceImpl} to reach the Ollama {@code /api/chat}
@@ -26,9 +33,12 @@ public class OllamaConfig {
 
     @Bean
     public RestClient ollamaRestClient(@Value("${spring.ai.ollama.base-url}") String baseUrl) {
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofMinutes(3));
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("ngrok-skip-browser-warning", "any")
+                .requestFactory(new ReactorClientHttpRequestFactory(httpClient))
                 .build();
     }
 }

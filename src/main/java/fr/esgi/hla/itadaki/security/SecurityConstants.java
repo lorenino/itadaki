@@ -17,7 +17,9 @@ public final class SecurityConstants {
             "/v3/api-docs/**",
             "/",
             "/index.html",
+            "/favicon.ico",
             "/css/**",
-            "/js/**"
+            "/js/**",
+            "/v2/**"
     };
 }

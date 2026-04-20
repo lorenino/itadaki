@@ -1,6 +1,6 @@
 // Itadaki — SPA principale, routing + câblage REST
 // Stratégie : squelette SPA inspiré v1, design visuel v2 intact
-const { useState, useEffect, useRef } = React;
+// React hooks (useState, useEffect, useMemo, useRef) deja declares dans primitives.jsx
 
 // ─── Wrapper fetch global ────────────────────────────────────────────────────
 const API = {
