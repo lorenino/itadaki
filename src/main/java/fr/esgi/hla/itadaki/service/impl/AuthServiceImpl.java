@@ -5,7 +5,7 @@ import fr.esgi.hla.itadaki.business.enums.UserRole;
 import fr.esgi.hla.itadaki.dto.auth.AuthResponseDto;
 import fr.esgi.hla.itadaki.dto.auth.LoginRequestDto;
 import fr.esgi.hla.itadaki.dto.auth.RegisterRequestDto;
-import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
+import fr.esgi.hla.itadaki.exception.ConflictException;
 import fr.esgi.hla.itadaki.exception.UnauthorizedException;
 import fr.esgi.hla.itadaki.mapper.UserMapper;
 import fr.esgi.hla.itadaki.repository.UserRepository;
@@ -32,10 +32,10 @@ public class AuthServiceImpl implements AuthService {
     public AuthResponseDto register(RegisterRequestDto request) {
         // Check if email or username already exists
         if (userRepository.existsByEmail(request.email())) {
-            throw new ResourceNotFoundException("Email already in use: " + request.email());
+            throw new ConflictException("Email already in use: " + request.email());
         }
         if (userRepository.existsByUsername(request.username())) {
-            throw new ResourceNotFoundException("Username already taken: " + request.username());
+            throw new ConflictException("Username already taken: " + request.username());
         }
 
         // Create new user

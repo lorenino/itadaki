@@ -4,8 +4,8 @@ import fr.esgi.hla.itadaki.business.Meal;
 import fr.esgi.hla.itadaki.business.enums.MealStatus;
 import fr.esgi.hla.itadaki.dto.meal.MealResponseDto;
 import fr.esgi.hla.itadaki.dto.meal.MealUploadResponseDto;
+import fr.esgi.hla.itadaki.exception.ForbiddenException;
 import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
-import fr.esgi.hla.itadaki.exception.UnauthorizedException;
 import fr.esgi.hla.itadaki.mapper.MealMapper;
 import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.repository.UserRepository;
@@ -63,7 +63,7 @@ public class MealServiceImpl implements MealService {
 
         // Check ownership
         if (!meal.getUser().getId().equals(requestingUserId)) {
-            throw new UnauthorizedException("You do not have permission to delete this meal");
+            throw new ForbiddenException("You do not have permission to delete this meal");
         }
 
         // Delete photo via MealPhotoService

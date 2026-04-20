@@ -21,13 +21,13 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 
 | # | Endpoint | Cas | Statut |
 |---|---|---|---|
-| 2.1 | POST /api/auth/register | Email dupliqué | ✅ 404 "Email already in use" (sémantiquement devrait être 409, front gère) |
-| 2.2 | POST /api/auth/register | Username dupliqué | ✅ 404 "Username already taken" (front gère) |
+| 2.1 | POST /api/auth/register | Email dupliqué | ✅ **409 Conflict** "Email already in use" (fix commit après batch) |
+| 2.2 | POST /api/auth/register | Username dupliqué | ✅ **409 Conflict** "Username already taken" |
 | 2.3 | POST /api/auth/register | Password < 8 car. | ✅ 400 "Password must be at least 8 characters" |
 | 2.4 | POST /api/auth/login | Password invalide | ✅ 401 "Invalid email or password" |
 | 2.5 | POST /api/meals | Sans auth JWT | ✅ 401 "Full authentication is required" |
-| 2.6 | POST /api/meals | Fichier non-image (.txt) | 🟡 Rejeté avec 500 "Validation failure" (devrait être 400, bug mapping ExceptionHandler) |
-| 2.7 | POST /api/meals | Fichier > 30 Mo | ✅ 500 "Maximum upload size exceeded" (devrait être 413 mais rejeté) |
+| 2.6 | POST /api/meals | Fichier non-image (.txt) | ✅ **400** "File type not allowed. Allowed types: JPEG, PNG, WebP" |
+| 2.7 | POST /api/meals | Fichier > 30 Mo | ✅ **413 Payload Too Large** "Fichier trop volumineux : 30 Mo maximum" |
 | 2.8 | POST /api/analyses/{id} | body vide | ✅ Déclenche analyse Ollama |
 | 2.9 | POST /api/analyses/{id} | body {"hint":"..."} | 🟡 Back UPSERT OK, E2E à reprendre quand Hugo back |
 | 2.10 | GET /api/analyses/{id} | Avant analyse (id inexistant) | ✅ 404 "Analysis not found" |
@@ -38,7 +38,7 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 | 2.15 | GET /api/stats/overview | User avec 5 meals | ✅ totalMeals=5, totalCalories=1050 |
 | 2.16 | GET /api/stats/daily?from=...&to=... | Range 7 jours | ✅ liste DailyCaloriesDto |
 | 2.17 | DELETE /api/meals/{id} | Own meal | ✅ 204 No Content |
-| 2.18 | DELETE /api/meals/{id} | Other user meal | ✅ 401 "You do not have permission" (devrait être 403 mais UnauthorizedException map 401) |
+| 2.18 | DELETE /api/meals/{id} | Other user meal | ✅ **403 Forbidden** "You do not have permission" (fix commit après batch) |
 
 ## 3. Front UX · **P1**
 
@@ -61,10 +61,10 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 | 4.1 | Token expiré → redirect auth automatique | ⬜ (24h hardcoded, difficile à tester rapide) |
 | 4.2 | Token tampered → 401 + redirect | ✅ 401 "Full authentication is required" |
 | 4.3 | Ollama down (ngrok tunnel coupé) → message clair | 🟡 Hugo éteint — validé indirectement (I/O error côté back) |
-| 4.4 | Image corrompue (octets aléatoires, content-type image/jpeg) | ❌ **201 accepté** ! `ValidImageFile` ne check que le content-type, pas le format réel. L'image passera à Ollama qui répondra probablement absurde. À fixer en P2. |
+| 4.4 | Image corrompue (octets aléatoires, content-type image/jpeg) | ✅ **400** "File content is not a valid image" (magic bytes check PNG/JPEG/WebP) |
 | 4.5 | Password < 8 caractères (validation) | ✅ doublon avec 2.3 |
 | 4.6 | Email invalide format | ✅ 400 "Valid email required" |
-| 4.7 | Username avec `<script>...</script>` | ❌ **201 accepté !** Username stocké brut — pas de validation côté back. React escape côté front donc pas de XSS en UI, mais risque si username affiché sans escape ailleurs. À fixer en P2. |
+| 4.7 | Username avec `<script>...</script>` | ✅ **400** "Username: lettres, chiffres, _ . - uniquement" (regex Pattern sur RegisterRequestDto) |
 | 4.8 | Network offline pendant analyse | ⬜ |
 | 4.9 | Reload browser pendant analyse → polling reprend ? | ⬜ |
 | 4.10 | XSS tentative dans hint ou username | 🟡 Username accepté tel quel (voir 4.7). Hint pas encore testé. |
@@ -90,20 +90,27 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 | 6.6 | ngrok tunnel Hugo actif (URL `ducky-shrank-washer.ngrok-free.dev`) | ⬜ |
 | 6.7 | Plan B : `OLLAMA_URL=http://localhost:11434` si Hugo down | ⬜ |
 
-## Bugs connus (tracking)
+## Bugs fixés (batch post-tests)
+
+- ✅ **409 Conflict** pour email/username dup (nouvelle `ConflictException`, avant c'était 404)
+- ✅ **403 Forbidden** pour cross-user DELETE (nouvelle `ForbiddenException`, avant 401)
+- ✅ **413 Payload Too Large** pour fichier > 30 Mo (handler `MaxUploadSizeExceededException`)
+- ✅ **400** pour fichier non-image via `HandlerMethodValidationException` (avant 500 via fallback)
+- ✅ **Username regex Pattern** `[\p{L}\p{N}_.-]{3-30}` (anti-XSS latent)
+- ✅ **Magic bytes check** dans `ImageFileValidator` (PNG/JPEG/WebP signatures)
+- ✅ **Dropzone UI** "10 Mo max" → "30 Mo max" + mention WebP
+- ✅ Front auth distingue 409 (conflit) de 400 (validation) et affiche message back pour 400
+- ✅ README : Java 21 → 25, endpoints corrigés (meals/analyses/history), Swagger URL correcte, entry script run.ps1
+- ✅ `reanalyzeMeal` UPSERT (commit `8bcc244`) — évite TransientPropertyValueException
+- ✅ DNS TTL JVM 30s (commit `7cacf63`) — re-résolution ngrok après restart Hugo
+
+## Bugs connus résiduels
 
 - ❌ favicon.ico 500 (cosmétique, pas bloquant)
-- ⚠ `MealAnalysisResponseDto.estimatedTotalCalories` persiste seulement `caloriesMax` (front compense en appliquant ±15% pour la fourchette)
-- ⚠ Register retourne 404 (au lieu de 409) si email/username déjà pris — front gère
-- ⚠ Reanalyze : back corrigé vers UPSERT (commit `8bcc244`). Avant : delete+insert cassait la OneToOne.
-- ⚠ DELETE cross-user renvoie 401 (au lieu de 403) — `UnauthorizedException` vs `ForbiddenException`
-- ⚠ POST /api/meals avec fichier non-image renvoie 500 (wrap d'une 400 par GlobalExceptionHandler) — semantique bancale
-- ❌ Username sans validation de format : `<script>...</script>` accepté. React escape en UI donc pas d'exploit réel mais risque latent.
-- ℹ UI dropzone affiche encore "10 Mo max" alors que la limite est 30 Mo — mettre à jour le texte front
+- ⚠ `MealAnalysisResponseDto.estimatedTotalCalories` persiste seulement `caloriesMax` (front compense ±15%)
 - ℹ Front analyze/reanalyze loading 404s polluent la console browser (normaux pendant polling) — pas bloquant
-- 🔧 **Fix DNS permanent** : `-Dnetworkaddress.cache.ttl=30` ajouté dans `pom.xml` (spring-boot-maven-plugin.jvmArguments). Avant : JVM cachait la résolution DNS échouée de ngrok en permanence → inutile de re-tester tant que Spring Boot n'est pas restart. Maintenant : cache expire en 30s.
-- ❌ Image corrompue acceptée (4.4) — le back ne valide que le content-type MIME, pas les magic bytes de l'image.
-- ⚠ Cold start Ollama + ngrok = ~55s la première requête après rallumage de Hugo (mesuré via curl direct).
+- ⚠ Cold start Ollama + ngrok = ~55s la première requête après rallumage de Hugo (mesuré via curl direct)
+- ⚠ `reanalyzeMeal` UPSERT : `meal.analysis` peut rester référencé à l'ancienne analyse en cache Hibernate — à vérifier si le front re-fetch bien après 2ᵉ passe (à tester E2E quand Ollama up)
 
 ## Sources
 

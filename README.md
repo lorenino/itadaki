@@ -24,9 +24,9 @@ Cela lance un menu interactif avec 3 options :
 
 ### Prérequis
 
-1. **Java 21+** (https://www.oracle.com/java/technologies/downloads/)
-2. **Maven 3.8+** (https://maven.apache.org/download.cgi)
-3. **GNU Make** (https://github.com/jqlang/jq/releases ou via Scoop)
+1. **Java 25+** (https://adoptium.net/temurin/ — Temurin JDK 25 ou 26 recommandé)
+2. **Maven 3.9+** (fourni via `./mvnw`, pas d'install globale requise)
+3. **GNU Make** (via Scoop : `scoop install make`)
 4. **Ollama** (https://ollama.com/download)
 5. **ngrok** (https://ngrok.com/download)
 
@@ -106,15 +106,29 @@ spring.ai.ollama.base-url=https://xxxx-yyyy-zzzz.ngrok-free.app
 
 ## 🚀 API Endpoints
 
+### Auth (public)
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| POST | `/api/auth/register` | Inscription |
-| POST | `/api/auth/login` | Connexion |
-| POST | `/api/photos` | Upload photo |
-| POST | `/api/photos/{id}/analyses` | Analyser |
-| GET | `/api/historique` | Historique |
+| POST | `/api/auth/register` | Inscription (retourne JWT + user) |
+| POST | `/api/auth/login` | Connexion (retourne JWT + user) |
 
-Documentation Swagger : http://localhost:8080/swagger-ui.html
+### Meals, Analyses, History (JWT Bearer requis)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| POST | `/api/meals` | Upload photo (multipart `image`) — max 30 Mo |
+| GET | `/api/meals/{id}` | Détail d'un meal |
+| DELETE | `/api/meals/{id}` | Supprimer (own uniquement) |
+| POST | `/api/analyses/{mealId}` | Déclencher analyse Ollama (body vide) |
+| POST | `/api/analyses/{mealId}` | 2ᵉ passe LLM (body `{"hint":"..."}`) |
+| GET | `/api/analyses/{mealId}` | Récupérer l'analyse |
+| GET | `/api/history?page=0&size=20` | Historique paginé |
+| GET | `/api/history/date/{YYYY-MM-DD}` | Meals d'une date |
+| GET | `/api/stats/overview` | Stats globales utilisateur |
+| GET | `/api/stats/daily?from=&to=` | Calories par jour |
+| POST | `/api/corrections/{mealId}` | Correction manuelle (bonus, optionnel) |
+| GET | `/api/users/{id}` | Profil par ID |
+
+Documentation Swagger interactive : http://localhost:8080/swagger-ui/index.html
 
 ---
 
@@ -134,7 +148,7 @@ Le dossier `automation/` contient un script PowerShell qui :
 make run
 
 # Ou directement
-powershell -NoProfile -ExecutionPolicy Bypass -File automation/itadaki-setup.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File automation/run.ps1
 ```
 
 ---
@@ -153,7 +167,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File automation/itadaki-setup.ps1
 - `AI_Model/setup-model.md` - Guide installation Ollama + ngrok
 - `AI_Model/VALIDATION-OLLAMA.md` - Détails IA et modèles
 - `automation/README.md` - Guide automation
-- `CONVENTIONS.md` - Conventions du projet
+- `TESTS.md` - Plan et résultats des tests fonctionnels
+- `Sujet.pdf` - Sujet officiel ESGI M1 AL IABD
 
 ---
 

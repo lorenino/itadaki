@@ -158,9 +158,19 @@ function AuthScreenWired({ T, onAuth, mobile }) {
       localStorage.setItem('itadaki.user', JSON.stringify(user));
       onAuth(user);
     } catch (ex) {
-      // Ahmed utilise 404 pour "email déjà pris" (ResourceNotFoundException)
-      if (ex.status === 404 || ex.status === 409 || ex.status === 400) {
+      // 409 Conflict = email/username deja pris (depuis fix GlobalExceptionHandler)
+      // 404 = legacy (avant fix : Ahmed utilisait ResourceNotFoundException)
+      if (ex.status === 409 || ex.status === 404) {
         setApiErr('Email ou nom d\'utilisateur déjà utilisé.');
+      } else if (ex.status === 400) {
+        // Validation Bean (password court, email invalide, username bad format)
+        // Le back renvoie un message specifique dans body
+        let msg = 'Données invalides.';
+        try {
+          const parsed = JSON.parse(ex.body || '{}');
+          if (parsed.message) msg = parsed.message;
+        } catch { /* body pas JSON */ }
+        setApiErr(msg);
       } else if (ex.status === 401) {
         setApiErr('Email ou mot de passe incorrect.');
       } else {
@@ -489,7 +499,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
                 <svg width="32" height="32" viewBox="0 0 28 28" fill="none"><rect x="4" y="7" width="20" height="16" rx="2" stroke={T.accent} strokeWidth="1.7" /><circle cx="14" cy="15" r="4.5" stroke={T.accent} strokeWidth="1.7" /><path d="M9 7l1.5-2.5h7L19 7" stroke={T.accent} strokeWidth="1.7" strokeLinejoin="round" /></svg>
               </div>
               <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 20 : 22, color: T.ink, letterSpacing: '-.02em', fontWeight: 500 }}>Glissez une photo ici</div>
-              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginTop: 6 }}>ou cliquez pour parcourir · JPG, PNG, HEIC · 10 Mo max</div>
+              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginTop: 6 }}>ou cliquez pour parcourir · JPG, PNG, WebP · 30 Mo max</div>
             </div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => pick(e.target.files[0])} />
           </div>
