@@ -81,25 +81,18 @@ const API = {
 };
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────────
+// healthScore est defini dans screens.jsx (charge avant app.jsx) et accessible
+// via le scope global partage. Ne pas redefinir ici pour eviter la divergence.
 
-// Calcule le score santé A→E d'un repas à partir de ses macros estimées
-function healthScore(m) {
-  const kcal = (m.kMin + m.kMax) / 2;
-  const items = m.analysisRaw?.detectedItems || [];
-  const prot  = items.reduce((s, i) => s + (i.protein  || 0), 0);
-  const carbs  = items.reduce((s, i) => s + (i.carbs    || 0), 0);
-  const fat    = items.reduce((s, i) => s + (i.fat      || 0), 0);
-  let points = 0;
-  if (kcal < 700) points += 2; else if (kcal < 900) points += 1;
-  if (prot >= 20) points += 2; else if (prot >= 15) points += 1;
-  if (fat < 20)   points += 1;
-  if (carbs > 40 && carbs < 80) points += 1;
-  const grade = ['E', 'D', 'C', 'B', 'A'][Math.min(4, points)];
-  const color = { A: '#4a8a3c', B: '#7fa644', C: '#d4a13c', D: '#d47a2f', E: '#c14a2f' }[grade];
-  return { grade, color };
-}
+// Label FR d'un MealType enum back (BREAKFAST/LUNCH/SNACK/DINNER)
+const MEAL_TYPE_LABELS = { BREAKFAST: 'Petit-déj', LUNCH: 'Déjeuner', SNACK: 'Goûter', DINNER: 'Dîner' };
 
-// Convertit un MealHistoryItemDto + MealAnalysisResponseDto en shape utilisée par les composants v2
+// Id de meal : harmonise les 3 shapes possibles (histItem.id, pseudo uploadRes.mealId, serverId)
+const getMealId = (m) => m && (m.mealId || m.serverId || m.id);
+
+// Fourchette kcal ±15% (le back ne persiste que le max, on reconstruit un min/max d'affichage)
+const kcalRange = (cal) => ({ kMin: Math.round(cal * 0.85), kMax: Math.round(cal * 1.15) });
+
 function toViewMeal(histItem, analysis) {
   const mid = analysis
     ? Math.round(analysis.estimatedTotalCalories || 0)
@@ -108,7 +101,6 @@ function toViewMeal(histItem, analysis) {
   const ing = analysis && analysis.detectedItems
     ? analysis.detectedItems.map(i => i.name || i.toString())
     : [];
-  const mtLabels = { BREAKFAST: 'Petit-déj', LUNCH: 'Déjeuner', SNACK: 'Goûter', DINNER: 'Dîner' };
   return {
     id: 'server-' + histItem.id,
     serverId: histItem.id,
@@ -116,12 +108,11 @@ function toViewMeal(histItem, analysis) {
     name: histItem.detectedDishName || analysis?.detectedDishName || 'Repas',
     ing,
     portion: 'moyen',
-    kMin: Math.round(mid * 0.85),
-    kMax: Math.round(mid * 1.15),
+    ...kcalRange(mid),
     conf: analysis ? Math.round((analysis.confidenceScore || 0.8) * 100) : 80,
     date: histItem.uploadedAt || new Date().toISOString(),
     mealType: histItem.mealType || null,
-    meal: mtLabels[histItem.mealType] || 'Repas',
+    meal: MEAL_TYPE_LABELS[histItem.mealType] || 'Repas',
     seed,
     photoUrl: histItem.photoUrl || null,
     analysisRaw: analysis,
@@ -420,19 +411,17 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       // Convertit en shape v2. mealType auto-detecte par heure (fallback
       // si le back n'a pas renvoye la valeur persistee).
       const mtNow = detectMealType();
-      const mtLbl = { BREAKFAST: 'Petit-déj', LUNCH: 'Déjeuner', SNACK: 'Goûter', DINNER: 'Dîner' }[mtNow];
       const pseudo = {
         id: 'new-' + mealId,
         serverId: mealId,
         name: analysisRes.detectedDishName || 'Repas analyse',
         ing: (analysisRes.detectedItems || []).map(i => i.name || String(i)),
         portion: 'moyen',
-        kMin: Math.round((analysisRes.estimatedTotalCalories || 500) * 0.85),
-        kMax: Math.round((analysisRes.estimatedTotalCalories || 500) * 1.15),
+        ...kcalRange(analysisRes.estimatedTotalCalories || 500),
         conf: Math.round((analysisRes.confidenceScore || 0.8) * 100),
         date: analysisRes.analyzedAt || new Date().toISOString(),
         mealType: mtNow,
-        meal: mtLbl,
+        meal: MEAL_TYPE_LABELS[mtNow],
         seed: mealId % 99 + 1,
         img,
         mealId,
@@ -643,12 +632,6 @@ function detectMealType(dateStrOrNow) {
   if (h >= 15 && h < 18) return 'SNACK';
   return 'DINNER';
 }
-const MEAL_TYPE_LABELS = {
-  BREAKFAST: 'Petit-déj',
-  LUNCH: 'Déjeuner',
-  SNACK: 'Goûter',
-  DINNER: 'Dîner',
-};
 
 function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [hint, setHint] = useState('');
@@ -659,7 +642,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [typeErr, setTypeErr] = useState('');
 
   const saveMealType = async (newType) => {
-    const mealId = meal.mealId || meal.serverId || meal.id;
+    const mealId = getMealId(meal);
     const prev = mealType;
     setMealType(newType); // optimistic
     setTypeErr('');
@@ -673,7 +656,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   };
 
   const doReanalyze = async () => {
-    const mealId = meal.mealId || meal.serverId || meal.id;
+    const mealId = getMealId(meal);
     if (!hint.trim()) return;
     if (!mealId) { setApiErr('ID du repas manquant'); return; }
     setLd(true);
@@ -719,8 +702,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
         ...meal,
         name: res.detectedDishName || meal.name,
         ing: (res.detectedItems || []).map(i => i.name || String(i)),
-        kMin: Math.round((res.estimatedTotalCalories || 0) * 0.85),
-        kMax: Math.round((res.estimatedTotalCalories || 0) * 1.15),
+        ...kcalRange(res.estimatedTotalCalories || 0),
         conf: Math.round((res.confidenceScore || 0.8) * 100),
         analysisRaw: res,
       };
@@ -1115,8 +1097,5 @@ function App() {
     </div>
   );
 }
-
-// Exposer healthScore pour screens.jsx (chargé avant app.jsx dans le HTML)
-window.healthScore = healthScore;
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);

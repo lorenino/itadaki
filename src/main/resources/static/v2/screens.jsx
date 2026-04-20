@@ -1,7 +1,7 @@
 // Screens — Auth, Dashboard, Upload, Correction, History, Profile — responsive
 
 // Score santé A→E (heuristique calories + macros)
-// Définie ici car screens.jsx est chargé avant app.jsx ; app.jsx expose aussi window.healthScore
+// Definie ici (screens.jsx chargée avant app.jsx) — app.jsx l'utilise via le scope global
 function healthScore(m){
   const kcal=(m.kMin+m.kMax)/2;
   const items=(m.analysisRaw&&m.analysisRaw.detectedItems)||[];

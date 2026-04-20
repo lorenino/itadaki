@@ -11,7 +11,7 @@ import fr.esgi.hla.itadaki.repository.MealAnalysisRepository;
 import fr.esgi.hla.itadaki.repository.MealPhotoRepository;
 import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.repository.UserRepository;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -28,7 +28,7 @@ import java.util.List;
  * au restart DevTools).
  */
 @Component
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Slf4j
 public class DataSeeder {
 

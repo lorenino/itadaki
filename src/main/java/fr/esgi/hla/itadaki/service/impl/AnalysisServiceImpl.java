@@ -75,22 +75,8 @@ public class AnalysisServiceImpl implements AnalysisService {
             meal.setStatus(MealStatus.ANALYSED);
             mealRepository.save(meal);
 
-            // Map to DTO and enrich with parsed items
-            MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
-            List<DetectedFoodItemDto> detectedItems = parseDetectedItems(rawResponse);
-
-            return new MealAnalysisResponseDto(
-                    dto.id(),
-                    dto.mealId(),
-                    dto.detectedDishName(),
-                    detectedItems,
-                    dto.estimatedTotalCalories(),
-                    dto.confidenceScore(),
-                    dto.rawModelResponse(),
-                    dto.analyzedAt()
-            );
+            return toResponseDto(analysis, rawResponse);
         } catch (Exception ex) {
-            // Update meal status to FAILED
             meal.setStatus(MealStatus.FAILED);
             mealRepository.save(meal);
             throw new MealAnalysisException("Analysis failed: " + ex.getMessage(), ex);
@@ -136,19 +122,7 @@ public class AnalysisServiceImpl implements AnalysisService {
             meal.setStatus(MealStatus.ANALYSED);
             mealRepository.save(meal);
 
-            MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
-            List<DetectedFoodItemDto> detectedItems = parseDetectedItems(rawResponse);
-
-            return new MealAnalysisResponseDto(
-                    dto.id(),
-                    dto.mealId(),
-                    dto.detectedDishName(),
-                    detectedItems,
-                    dto.estimatedTotalCalories(),
-                    dto.confidenceScore(),
-                    dto.rawModelResponse(),
-                    dto.analyzedAt()
-            );
+            return toResponseDto(analysis, rawResponse);
         } catch (Exception ex) {
             meal.setStatus(MealStatus.FAILED);
             mealRepository.save(meal);
@@ -160,10 +134,16 @@ public class AnalysisServiceImpl implements AnalysisService {
     public MealAnalysisResponseDto getAnalysis(Long mealId) {
         MealAnalysis analysis = mealAnalysisRepository.findByMealId(mealId)
                 .orElseThrow(() -> new ResourceNotFoundException("Analysis not found for meal id: " + mealId));
+        return toResponseDto(analysis, analysis.getDetectedItemsJson());
+    }
 
+    /**
+     * Hydrate une MealAnalysisResponseDto via le mapper MapStruct puis injecte
+     * detectedItems parse depuis le JSON brut (MapStruct ignore ce champ).
+     */
+    private MealAnalysisResponseDto toResponseDto(MealAnalysis analysis, String itemsJson) {
         MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
-        List<DetectedFoodItemDto> detectedItems = parseDetectedItems(analysis.getDetectedItemsJson());
-
+        List<DetectedFoodItemDto> detectedItems = parseDetectedItems(itemsJson);
         return new MealAnalysisResponseDto(
                 dto.id(),
                 dto.mealId(),
