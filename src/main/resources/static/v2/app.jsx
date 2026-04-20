@@ -319,20 +319,45 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     setProg(10);
     setApiErr('');
     try {
-      // Étape 1 — upload image
+      // Etape 1 — upload image
       const uploadRes = await API.meals.upload(file);
       const mealId = uploadRes.mealId;
-      setProg(40);
+      setProg(30);
 
-      // Étape 2 — déclenche l'analyse IA
-      const analysisRes = await API.analyses.analyze(mealId);
+      // Etape 2 — declenche l'analyse IA en background (fire-and-forget)
+      // Le POST peut prendre 60-150s via ngrok qui peut couper la connexion.
+      // On ignore sa reponse et on poll GET /api/analyses/{mealId} jusqu'a
+      // ce que l'analyse soit persistee cote back.
+      let postErr = null;
+      const postPromise = API.analyses.analyze(mealId).catch(e => { postErr = e; });
+
+      // Polling GET toutes les 2s, max 3 min (90 iterations)
+      let analysisRes = null;
+      const maxAttempts = 90;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const r = await API.analyses.get(mealId);
+          if (r && r.id) { analysisRes = r; break; }
+        } catch (e) {
+          if (e.status !== 404) throw e; // erreur reseau reelle
+        }
+        // Si le POST a crash avec autre chose qu'un timeout reseau, propage
+        if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+          throw postErr;
+        }
+        setProg(30 + Math.min(65, i));
+      }
+      if (!analysisRes) {
+        throw { status: 504, body: 'Analyse trop longue (>3 min). Reessayez.' };
+      }
       setProg(100);
 
       // Convertit en shape v2
       const pseudo = {
         id: 'new-' + mealId,
         serverId: mealId,
-        name: analysisRes.detectedDishName || 'Repas analysé',
+        name: analysisRes.detectedDishName || 'Repas analyse',
         ing: (analysisRes.detectedItems || []).map(i => i.name || String(i)),
         portion: 'moyen',
         kMin: Math.round((analysisRes.estimatedTotalCalories || 500) * 0.85),
