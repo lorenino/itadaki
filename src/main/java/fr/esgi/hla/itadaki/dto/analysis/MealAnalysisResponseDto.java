@@ -18,6 +18,7 @@ public record MealAnalysisResponseDto(
         List<DetectedFoodItemDto> detectedItems,
         Double estimatedTotalCalories,
         Double confidenceScore,
+        @JsonProperty(access = JsonProperty.Access.READ_ONLY) String rawModelResponse,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) String analyzedAt
 ) implements Serializable {
 }

@@ -86,6 +86,7 @@ public class AnalysisServiceImpl implements AnalysisService {
                     detectedItems,
                     dto.estimatedTotalCalories(),
                     dto.confidenceScore(),
+                    dto.rawModelResponse(),
                     dto.analyzedAt()
             );
         } catch (Exception ex) {
@@ -145,6 +146,7 @@ public class AnalysisServiceImpl implements AnalysisService {
                     detectedItems,
                     dto.estimatedTotalCalories(),
                     dto.confidenceScore(),
+                    dto.rawModelResponse(),
                     dto.analyzedAt()
             );
         } catch (Exception ex) {
@@ -169,6 +171,7 @@ public class AnalysisServiceImpl implements AnalysisService {
                 detectedItems,
                 dto.estimatedTotalCalories(),
                 dto.confidenceScore(),
+                dto.rawModelResponse(),
                 dto.analyzedAt()
         );
     }
