@@ -1,0 +1,62 @@
+HELP.md
+
+### Maven / Build ###
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+.mvn/wrapper/maven-wrapper.jar
+
+### Logs ###
+*.log
+logs/
+hs_err_pid*
+replay_pid*
+
+### Runtime / Local files ###
+*.pid
+*.seed
+*.pid.lock
+
+### Local storage ###
+uploads/
+tmp/
+temp/
+
+### H2 Database ###
+*.mv.db
+*.trace.db
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### OS files ###
+.DS_Store
+Thumbs.db
+.claude
+CLUADE.md
