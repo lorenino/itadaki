@@ -98,10 +98,9 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     @Override
     public MealAnalysisResponseDto reanalyzeMeal(Long mealId, ReanalyzeRequestDto request) {
-        // Delete existing analysis if any
-        mealAnalysisRepository.deleteByMealId(mealId);
-
-        // Re-run analysis with hint
+        // UPSERT pattern : on reutilise l'analyse existante plutot que delete+insert.
+        // Le delete+insert cassait la relation OneToOne Meal<->MealAnalysis
+        // (TransientPropertyValueException quand meal.analysis reference l'entite supprimee).
         Meal meal = mealRepository.findById(mealId)
                 .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
 
@@ -115,13 +114,21 @@ public class AnalysisServiceImpl implements AnalysisService {
 
             JsonNode jsonNode = objectMapper.readTree(rawResponse);
 
-            MealAnalysis analysis = new MealAnalysis();
-            analysis.setMeal(meal);
+            // Trouve l'analyse existante ou en cree une nouvelle
+            MealAnalysis analysis = mealAnalysisRepository.findByMealId(mealId)
+                    .orElseGet(() -> {
+                        MealAnalysis a = new MealAnalysis();
+                        a.setMeal(meal);
+                        return a;
+                    });
             analysis.setDetectedDishName(extractString(jsonNode, "nomPlat"));
             analysis.setDetectedItemsJson(rawResponse);
             analysis.setEstimatedTotalCalories(extractCalories(jsonNode));
             analysis.setConfidenceScore(parseConfidence(extractString(jsonNode, "confiance")));
             analysis.setRawModelResponse(rawResponse);
+            // Force analyzedAt = now pour que le polling front detecte la mise a jour
+            // (CreationTimestamp ne change pas sur un update)
+            analysis.setAnalyzedAt(java.time.LocalDateTime.now());
 
             analysis = mealAnalysisRepository.save(analysis);
 

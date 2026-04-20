@@ -522,12 +522,43 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [apiErr, setApiErr] = useState('');
 
   const doReanalyze = async () => {
-    if (!hint.trim() || !meal.mealId) return;
+    const mealId = meal.mealId || meal.serverId || meal.id;
+    if (!hint.trim()) return;
+    if (!mealId) { setApiErr('ID du repas manquant'); return; }
     setLd(true);
     setApiErr('');
     try {
-      const res = await API.analyses.reanalyze(meal.mealId, hint.trim());
-      // Met à jour localement l'affichage de la correction
+      // Fire-and-forget + polling (meme pattern que analyze() : ngrok peut
+      // couper la connexion avant que le POST reponde, mais le back persiste
+      // l'analyse en BDD). On compare le timestamp analyzedAt pour detecter
+      // la nouvelle analyse (elle remplace l'ancienne via deleteByMealId).
+      const oldAnalyzedAt = meal.analysisRaw?.analyzedAt || meal.date || '';
+      let postErr = null;
+      const postPromise = API.analyses.reanalyze(mealId, hint.trim())
+        .catch(e => { postErr = e; return null; });
+
+      let res = null;
+      for (let i = 0; i < 90; i++) { // 90 * 2s = 3 min max
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const r = await API.analyses.get(mealId);
+          if (r && r.id && r.analyzedAt && r.analyzedAt !== oldAnalyzedAt) {
+            res = r;
+            break;
+          }
+        } catch (e) {
+          if (e.status !== 404) throw e;
+        }
+        if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+          throw postErr;
+        }
+      }
+      // Fallback : si le polling n'a pas distingue la nouvelle, attend le POST
+      if (!res) {
+        res = await postPromise;
+      }
+      if (!res) throw { status: 504, body: '2e passe trop longue (>3 min)' };
+
       const updated = {
         ...meal,
         name: res.detectedDishName || meal.name,
@@ -539,7 +570,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
       };
       setReanalyzed(updated);
     } catch (e) {
-      setApiErr('Erreur lors de la 2ᵉ passe : ' + (e.body || 'serveur indisponible'));
+      setApiErr('Erreur lors de la 2ᵉ passe : ' + (e.body || e.message || 'serveur indisponible'));
     } finally {
       setLd(false);
     }
