@@ -1,0 +1,64 @@
+{
+  "exemples": [
+    {
+      "cas": "Plat FR classique",
+      "description": "Poulet curry avec riz et légumes",
+      "reponse_llm": {
+        "nomPlat": "Poulet curry riz basmati",
+        "ingredients": ["poulet", "riz basmati", "sauce curry", "oignons", "coriandre"],
+        "portion": "moyen",
+        "caloriesMin": 480,
+        "caloriesMax": 620,
+        "confiance": "moyenne"
+      }
+    },
+    {
+      "cas": "Petit plat léger",
+      "description": "Salade verte avec œuf",
+      "reponse_llm": {
+        "nomPlat": "Salade verte aux œufs mollets",
+        "ingredients": ["laitue", "œuf mollet", "vinaigrette", "croûtons"],
+        "portion": "petit",
+        "caloriesMin": 180,
+        "caloriesMax": 260,
+        "confiance": "haute"
+      }
+    },
+    {
+      "cas": "Grosse portion",
+      "description": "Pâtes bolognaise généreuses",
+      "reponse_llm": {
+        "nomPlat": "Spaghetti bolognaise",
+        "ingredients": ["spaghetti", "sauce tomate", "bœuf haché", "oignons", "parmesan"],
+        "portion": "grand",
+        "caloriesMin": 720,
+        "caloriesMax": 950,
+        "confiance": "moyenne"
+      }
+    },
+    {
+      "cas": "Plat non identifié (fallback)",
+      "description": "Photo floue ou non alimentaire",
+      "reponse_llm": {
+        "nomPlat": "inconnu",
+        "ingredients": [],
+        "portion": "moyen",
+        "caloriesMin": 0,
+        "caloriesMax": 0,
+        "confiance": "basse"
+      }
+    },
+    {
+      "cas": "Plat asiatique",
+      "description": "Sushi assortiment",
+      "reponse_llm": {
+        "nomPlat": "Assortiment de sushi",
+        "ingredients": ["riz vinaigré", "saumon cru", "thon cru", "avocat", "algue nori", "wasabi", "gingembre mariné"],
+        "portion": "moyen",
+        "caloriesMin": 400,
+        "caloriesMax": 580,
+        "confiance": "haute"
+      }
+    }
+  ]
+}
