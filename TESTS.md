@@ -27,7 +27,7 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 | 2.4 | POST /api/auth/login | Password invalide | ✅ 401 "Invalid email or password" |
 | 2.5 | POST /api/meals | Sans auth JWT | ✅ 401 "Full authentication is required" |
 | 2.6 | POST /api/meals | Fichier non-image (.txt) | 🟡 Rejeté avec 500 "Validation failure" (devrait être 400, bug mapping ExceptionHandler) |
-| 2.7 | POST /api/meals | Fichier > 30 Mo | ⬜ Multipart limit (bumped to 30MB) |
+| 2.7 | POST /api/meals | Fichier > 30 Mo | ✅ 500 "Maximum upload size exceeded" (devrait être 413 mais rejeté) |
 | 2.8 | POST /api/analyses/{id} | body vide | ✅ Déclenche analyse Ollama |
 | 2.9 | POST /api/analyses/{id} | body {"hint":"..."} | 🟡 Back UPSERT OK, E2E à reprendre quand Hugo back |
 | 2.10 | GET /api/analyses/{id} | Avant analyse (id inexistant) | ✅ 404 "Analysis not found" |
@@ -61,7 +61,7 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 | 4.1 | Token expiré → redirect auth automatique | ⬜ (24h hardcoded, difficile à tester rapide) |
 | 4.2 | Token tampered → 401 + redirect | ✅ 401 "Full authentication is required" |
 | 4.3 | Ollama down (ngrok tunnel coupé) → message clair | 🟡 Hugo éteint — validé indirectement (I/O error côté back) |
-| 4.4 | Image corrompue (octets aléatoires) | ⬜ |
+| 4.4 | Image corrompue (octets aléatoires, content-type image/jpeg) | ❌ **201 accepté** ! `ValidImageFile` ne check que le content-type, pas le format réel. L'image passera à Ollama qui répondra probablement absurde. À fixer en P2. |
 | 4.5 | Password < 8 caractères (validation) | ✅ doublon avec 2.3 |
 | 4.6 | Email invalide format | ✅ 400 "Valid email required" |
 | 4.7 | Username avec `<script>...</script>` | ❌ **201 accepté !** Username stocké brut — pas de validation côté back. React escape côté front donc pas de XSS en UI, mais risque si username affiché sans escape ailleurs. À fixer en P2. |
@@ -101,6 +101,9 @@ Préparation démo jury ESGI — mardi 21 avril 2026 après-midi (15 min).
 - ❌ Username sans validation de format : `<script>...</script>` accepté. React escape en UI donc pas d'exploit réel mais risque latent.
 - ℹ UI dropzone affiche encore "10 Mo max" alors que la limite est 30 Mo — mettre à jour le texte front
 - ℹ Front analyze/reanalyze loading 404s polluent la console browser (normaux pendant polling) — pas bloquant
+- 🔧 **Fix DNS permanent** : `-Dnetworkaddress.cache.ttl=30` ajouté dans `pom.xml` (spring-boot-maven-plugin.jvmArguments). Avant : JVM cachait la résolution DNS échouée de ngrok en permanence → inutile de re-tester tant que Spring Boot n'est pas restart. Maintenant : cache expire en 30s.
+- ❌ Image corrompue acceptée (4.4) — le back ne valide que le content-type MIME, pas les magic bytes de l'image.
+- ⚠ Cold start Ollama + ngrok = ~55s la première requête après rallumage de Hugo (mesuré via curl direct).
 
 ## Sources
 
