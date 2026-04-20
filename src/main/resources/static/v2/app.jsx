@@ -665,7 +665,28 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
             {displayMeal.name}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-            {displayMeal.ing.map((i, idx) => <Chip key={idx} T={T} variant="default">{i}</Chip>)}
+            {(() => {
+              const items = displayMeal.analysisRaw && displayMeal.analysisRaw.detectedItems
+                ? displayMeal.analysisRaw.detectedItems
+                : displayMeal.ing.map(name => ({ name, calories: null, protein: null, carbs: null, fat: null }));
+              return items.map((item, idx) => {
+                const name = item.name || item;
+                const hasMacros = item.calories != null || item.protein != null;
+                const macroStr = hasMacros
+                  ? `${Math.round(item.calories || 0)} kcal · ${Math.round(item.protein || 0)}P / ${Math.round(item.carbs || 0)}G / ${Math.round(item.fat || 0)}L`
+                  : null;
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                    <Chip T={T} variant="default">{name}</Chip>
+                    {macroStr && (
+                      <span style={{ fontFamily: 'Inter,system-ui', fontSize: 10.5, color: T.inkMuted, paddingLeft: 2 }}>
+                        {macroStr}
+                      </span>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
 
           {/* Classement du repas — petit-dej / dej / snack / diner */}

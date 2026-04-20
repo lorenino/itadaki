@@ -40,26 +40,31 @@ import java.util.Map;
 public class OllamaServiceImpl implements OllamaService {
 
     private static final String SYSTEM_PROMPT = """
-            You are a nutritionist analyzing a photo of a plate/dish.
+            Tu es un nutritionniste analysant la photo d'une assiette.
 
-            Return ONLY valid JSON matching this exact schema (no prose, no markdown, no code fences):
+            Retourne UNIQUEMENT du JSON valide correspondant exactement à ce schéma (pas de texte, pas de markdown, pas de balises) :
             {
               "nomPlat": string,
-              "ingredients": string[],
+              "ingredients": [
+                {"nom": string, "caloriesApprox": integer, "proteines": number, "glucides": number, "lipides": number},
+                ...
+              ],
               "portion": string,
               "caloriesMin": integer,
               "caloriesMax": integer,
               "confiance": string
             }
 
-            Rules:
-            - JSON only. No explanation, no comments, no markdown fences.
-            - nomPlat and ingredients MUST be in French (French cuisine terms when applicable).
-            - portion values MUST be lowercase French: "petit", "moyen", "grand".
-            - caloriesMin must be strictly less than caloriesMax, both positive integers.
-            - confiance MUST be one of: "haute", "moyenne", "basse".
-            - Default "confiance" to "moyenne" when unsure.
-            - If no dish is visible, return:
+            Règles :
+            - JSON uniquement. Aucune explication, aucun commentaire, aucune balise markdown.
+            - nomPlat et les champs nom des ingrédients DOIVENT être en français.
+            - portion DOIT être en minuscules français : "petit", "moyen", "grand".
+            - caloriesMin doit être strictement inférieur à caloriesMax, tous deux entiers positifs.
+            - caloriesApprox est en kcal pour la portion détectée de cet ingrédient.
+            - proteines, glucides, lipides sont en grammes pour la portion détectée.
+            - confiance DOIT être l'un de : "haute", "moyenne", "basse".
+            - Par défaut, confiance = "moyenne" si incertain.
+            - Si aucun plat n'est visible, retourner :
               {"nomPlat":"inconnu","ingredients":[],"portion":"moyen","caloriesMin":0,"caloriesMax":0,"confiance":"basse"}
             """;
 

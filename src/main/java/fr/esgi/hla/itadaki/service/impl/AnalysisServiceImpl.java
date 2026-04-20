@@ -212,21 +212,44 @@ public class AnalysisServiceImpl implements AnalysisService {
             JsonNode node = objectMapper.readTree(jsonString);
             if (node.has("ingredients") && node.get("ingredients").isArray()) {
                 for (JsonNode ingredient : node.get("ingredients")) {
-                    // For now, create simple items from ingredient names
-                    DetectedFoodItemDto item = new DetectedFoodItemDto(
-                            ingredient.asText(),
-                            1.0,
-                            "portion",
-                            null,
-                            null,
-                            null,
-                            null
-                    );
-                    items.add(item);
+                    if (ingredient.isTextual()) {
+                        // Rétro-compatibilité : ancien format string[]
+                        DetectedFoodItemDto item = new DetectedFoodItemDto(
+                                ingredient.asText(),
+                                1.0,
+                                "portion",
+                                null,
+                                null,
+                                null,
+                                null
+                        );
+                        items.add(item);
+                    } else if (ingredient.isObject()) {
+                        // Nouveau format : {nom, caloriesApprox, proteines, glucides, lipides}
+                        String nom = ingredient.has("nom") ? ingredient.get("nom").asText() : "inconnu";
+                        Double calories = ingredient.has("caloriesApprox") && !ingredient.get("caloriesApprox").isNull()
+                                ? ingredient.get("caloriesApprox").asDouble() : null;
+                        Double proteines = ingredient.has("proteines") && !ingredient.get("proteines").isNull()
+                                ? ingredient.get("proteines").asDouble() : null;
+                        Double glucides = ingredient.has("glucides") && !ingredient.get("glucides").isNull()
+                                ? ingredient.get("glucides").asDouble() : null;
+                        Double lipides = ingredient.has("lipides") && !ingredient.get("lipides").isNull()
+                                ? ingredient.get("lipides").asDouble() : null;
+                        DetectedFoodItemDto item = new DetectedFoodItemDto(
+                                nom,
+                                1.0,
+                                "portion",
+                                calories,
+                                proteines,
+                                glucides,
+                                lipides
+                        );
+                        items.add(item);
+                    }
                 }
             }
         } catch (Exception ex) {
-            // If parsing fails, return empty list
+            // Si le parsing échoue, retourne la liste vide
         }
         return items;
     }
