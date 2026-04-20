@@ -271,13 +271,14 @@ function AuthScreenWired({ T, onAuth, mobile }) {
 function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
   const [meals, setMeals] = useState([]);
   const [days, setDays] = useState(() => buildLast7(null));
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [histPage, dailyData] = await Promise.all([
+        const [histPage, dailyData, overviewData] = await Promise.all([
           API.history.list(0, 20).catch(() => ({ content: [] })),
           (async () => {
             const today = new Date();
@@ -287,11 +288,13 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
               today.toISOString().slice(0, 10)
             ).catch(() => []);
           })(),
+          API.stats.overview().catch(() => null),
         ]);
         const items = histPage.content || [];
         const viewMeals = items.map(h => toViewMeal(h, null));
         setMeals(viewMeals);
         setDays(buildLast7(dailyData));
+        setOverview(overviewData);
       } catch (e) {
         console.warn('Dashboard load error', e);
       } finally {
@@ -305,7 +308,7 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
   }
 
   // On réutilise le composant Dashboard de v2/screens.jsx en lui passant les données réelles
-  return <Dashboard T={T} user={user} meals={meals} days_override={days}
+  return <Dashboard T={T} user={user} meals={meals} days_override={days} overview={overview}
     onUpload={onUpload} onHistory={onHistory} onMeal={onMeal} mobile={mobile} />;
 }
 

@@ -1,12 +1,16 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import fr.esgi.hla.itadaki.business.Meal;
+import fr.esgi.hla.itadaki.business.MealAnalysis;
 import fr.esgi.hla.itadaki.dto.stats.DailyCaloriesDto;
 import fr.esgi.hla.itadaki.dto.stats.StatsOverviewDto;
 import fr.esgi.hla.itadaki.repository.MealAnalysisRepository;
 import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.service.StatsService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +30,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class StatsServiceImpl implements StatsService {
 
     private final MealAnalysisRepository mealAnalysisRepository;
     private final MealRepository mealRepository;
+    private final ObjectMapper objectMapper;
 
     @Override
     public StatsOverviewDto getOverview(Long userId) {
@@ -43,11 +49,29 @@ public class StatsServiceImpl implements StatsService {
 
         // Calculate totals and averages
         double totalCalories = 0.0;
+        double totalProtein = 0.0;
+        double totalCarbs = 0.0;
+        double totalFat = 0.0;
         int mealCount = meals.size();
+        int mealsWithMacros = 0; // denominateur pour moyenne des macros
 
         for (Meal meal : meals) {
-            if (meal.getAnalysis() != null && meal.getAnalysis().getEstimatedTotalCalories() != null) {
-                totalCalories += meal.getAnalysis().getEstimatedTotalCalories();
+            MealAnalysis analysis = meal.getAnalysis();
+            if (analysis == null) continue;
+
+            if (analysis.getEstimatedTotalCalories() != null) {
+                totalCalories += analysis.getEstimatedTotalCalories();
+            }
+
+            // Parse detectedItemsJson pour sommer les macros par ingredient
+            // (format persiste depuis commit dd7da30 :
+            // {"ingredients":[{"nom":"...","caloriesApprox":X,"proteines":Y,"glucides":Z,"lipides":W},...]})
+            double[] mealMacros = extractMealMacros(analysis.getDetectedItemsJson());
+            if (mealMacros != null) {
+                totalProtein += mealMacros[0];
+                totalCarbs   += mealMacros[1];
+                totalFat     += mealMacros[2];
+                mealsWithMacros++;
             }
         }
 
@@ -60,16 +84,58 @@ public class StatsServiceImpl implements StatsService {
         long daysSinceFirst = ChronoUnit.DAYS.between(firstMealTime.toLocalDate(), LocalDate.now()) + 1;
         double avgDailyCalories = totalCalories / Math.max(daysSinceFirst, 1);
 
+        // Moyennes macros PAR REPAS (pas par jour : plus pertinent pour un "profil nutritionnel")
+        double avgProtein = mealsWithMacros > 0 ? totalProtein / mealsWithMacros : 0.0;
+        double avgCarbs   = mealsWithMacros > 0 ? totalCarbs   / mealsWithMacros : 0.0;
+        double avgFat     = mealsWithMacros > 0 ? totalFat     / mealsWithMacros : 0.0;
+
         return new StatsOverviewDto(
                 mealCount,
                 totalCalories,
                 avgDailyCalories,
-                0.0, // TODO: Calculate averages from analysis items
-                0.0,
-                0.0,
+                avgProtein,
+                avgCarbs,
+                avgFat,
                 firstMealTime.toLocalDate().toString(),
                 LocalDate.now().toString()
         );
+    }
+
+    /**
+     * Parse detectedItemsJson et somme les macros (proteines/glucides/lipides)
+     * de tous les ingredients du repas. Retourne null si aucune macro trouvee
+     * (pour que le denominateur de moyenne ne soit pas fausse par des repas
+     * sans breakdown nutritionnel).
+     */
+    private double[] extractMealMacros(String detectedItemsJson) {
+        if (detectedItemsJson == null || detectedItemsJson.isBlank()) return null;
+        try {
+            JsonNode root = objectMapper.readTree(detectedItemsJson);
+            JsonNode items = root.get("ingredients");
+            if (items == null || !items.isArray()) return null;
+
+            double prot = 0, carbs = 0, fat = 0;
+            boolean found = false;
+            for (JsonNode item : items) {
+                if (!item.isObject()) continue;
+                if (item.has("proteines") && !item.get("proteines").isNull()) {
+                    prot += item.get("proteines").asDouble(0);
+                    found = true;
+                }
+                if (item.has("glucides") && !item.get("glucides").isNull()) {
+                    carbs += item.get("glucides").asDouble(0);
+                    found = true;
+                }
+                if (item.has("lipides") && !item.get("lipides").isNull()) {
+                    fat += item.get("lipides").asDouble(0);
+                    found = true;
+                }
+            }
+            return found ? new double[]{prot, carbs, fat} : null;
+        } catch (Exception ex) {
+            log.debug("Could not parse detectedItemsJson for stats macros: {}", ex.getMessage());
+            return null;
+        }
     }
 
     @Override

@@ -64,7 +64,7 @@ function Auth({T,onAuth,mobile}){
   </div>;
 }
 
-function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override}){
+function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,overview}){
   const days=days_override||last7(meals);
   const today=days[6];
   const target=2200;
@@ -137,6 +137,21 @@ function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override}
         </div>
       </div>
     </div>
+
+    {/* Profil nutritionnel — macros moyennes par repas */}
+    {overview&&overview.avgProtein!=null&&(overview.avgProtein>0||overview.avgCarbs>0||overview.avgFat>0)&&
+    <div style={{display:'grid',gridTemplateColumns:mobile?'repeat(3,1fr)':'repeat(3,1fr)',gap:mobile?8:12,marginBottom:mobile?16:20}}>
+      {[
+        {l:'Protéines',v:overview.avgProtein,c:'#d07a52',bg:T.accentSoft},
+        {l:'Glucides',  v:overview.avgCarbs,  c:'#8aa661',bg:T.matchaSoft},
+        {l:'Lipides',   v:overview.avgFat,    c:'#b88242',bg:T.accentSoft},
+      ].map(m=><div key={m.l} style={{background:T.surface,borderRadius:18,padding:mobile?12:16,border:`1px solid ${T.hairline}`,textAlign:'center',position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:m.c}}/>
+        <div style={{fontFamily:'Inter,system-ui',fontSize:10,color:T.inkFaint,textTransform:'uppercase',letterSpacing:'.1em',fontWeight:500,marginBottom:4}}>{m.l}</div>
+        <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:mobile?20:22,color:T.ink,fontWeight:600,letterSpacing:'-.02em'}}>{Math.round(m.v)}<span style={{fontSize:11,color:T.inkFaint,marginLeft:2,fontFamily:'Inter,system-ui',fontWeight:500}}>g</span></div>
+        <div style={{fontFamily:'Inter,system-ui',fontSize:9.5,color:T.inkFaint,marginTop:2,letterSpacing:'.04em'}}>moy / repas</div>
+      </div>)}
+    </div>}
 
     {/* CTA */}
     <button onClick={onUpload} style={{width:'100%',padding:mobile?20:26,background:T.ink,color:T.bg,border:'none',borderRadius:24,display:'flex',alignItems:'center',gap:mobile?14:20,cursor:'pointer',textAlign:'left',boxShadow:'0 14px 34px -10px rgba(30,15,5,.4)',position:'relative',overflow:'hidden',marginBottom:mobile?16:20}}>
