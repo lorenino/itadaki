@@ -4,6 +4,7 @@ import fr.esgi.hla.itadaki.business.Meal;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,4 +32,12 @@ public interface MealRepository extends JpaRepository<Meal, Long> {
             """)
     List<Meal> findByUserIdAndDate(@Param("userId") Long userId,
                                    @Param("date") LocalDate date);
+
+    /**
+     * Force la mise à jour de uploadedAt (utilisé par DataSeeder pour horodater
+     * les repas démo dans le passé, contournant @CreationTimestamp).
+     */
+    @Modifying
+    @Query("UPDATE Meal m SET m.uploadedAt = :uploadedAt WHERE m.id = :id")
+    void updateUploadedAt(@Param("id") Long id, @Param("uploadedAt") LocalDateTime uploadedAt);
 }
