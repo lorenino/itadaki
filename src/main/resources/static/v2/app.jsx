@@ -779,7 +779,7 @@ function HistoryWired({ T, onMeal, mobile }) {
       <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginBottom: 20 }}>{meals.length} repas enregistrés</div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 }}>
-        {[{ id: 'all', l: 'Tout' }, { id: 'Petit-déj.', l: 'Petit-déj.' }, { id: 'Déjeuner', l: 'Déjeuner' }, { id: 'Dîner', l: 'Dîner' }].map(f => (
+        {[{ id: 'all', l: 'Tout' }, { id: 'Petit-déj', l: 'Petit-déj' }, { id: 'Déjeuner', l: 'Déjeuner' }, { id: 'Dîner', l: 'Dîner' }].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             style={{ padding: '7px 14px', background: filter === f.id ? T.ink : T.bgAlt, color: filter === f.id ? T.bg : T.inkMuted, border: 'none', borderRadius: 999, fontFamily: 'Inter,system-ui', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{f.l}</button>
         ))}

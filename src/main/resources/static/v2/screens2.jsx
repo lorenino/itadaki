@@ -205,7 +205,7 @@ function History({T,meals,onMeal,mobile}){
     <div style={{fontFamily:'Inter,system-ui',fontSize:13,color:T.inkMuted,marginBottom:20}}>{meals.length} repas enregistrés</div>
 
     <div style={{display:'flex',gap:8,marginBottom:20,overflowX:'auto',paddingBottom:4}}>
-      {[{id:'all',l:'Tout'},{id:'Petit-déj.',l:'Petit-déj.'},{id:'Déjeuner',l:'Déjeuner'},{id:'Dîner',l:'Dîner'}].map(f=>
+      {[{id:'all',l:'Tout'},{id:'Petit-déj',l:'Petit-déj'},{id:'Déjeuner',l:'Déjeuner'},{id:'Dîner',l:'Dîner'}].map(f=>
         <button key={f.id} onClick={()=>setFilter(f.id)} style={{padding:'7px 14px',background:filter===f.id?T.ink:T.bgAlt,color:filter===f.id?T.bg:T.inkMuted,border:'none',borderRadius:999,fontFamily:'Inter,system-ui',fontSize:12.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{f.l}</button>)}
     </div>
 
@@ -258,6 +258,7 @@ function Profile({T,user,onLogout,mobile,dark,setDark}){
       <RowBtn T={T} label="Exporter mes données" sub="CSV · 14 jours"/>
       <RowBtn T={T} label="Confidentialité & données"/>
       <RowBtn T={T} label="Aide & contact"/>
+      <RowLink T={T} label="Documentation API" href="/swagger-ui/index.html"/>
       <RowBtn T={T} label="Se déconnecter" danger onClick={onLogout}/>
     </Section>
 
@@ -284,6 +285,12 @@ function RowBtn({T,label,sub,danger,onClick}){
     </div>
     <svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M7 4l5 5-5 5" stroke={T.inkFaint} strokeWidth="1.5" strokeLinecap="round"/></svg>
   </button>;
+}
+function RowLink({T,label,href}){
+  return <a href={href} target="_blank" rel="noopener" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'13px 0',borderBottom:`1px solid ${T.hairline}`,textDecoration:'none',fontFamily:'Inter,system-ui'}}>
+    <div style={{fontSize:14,color:T.ink,fontWeight:500}}>{label}</div>
+    <svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M10 4h4v4" stroke={T.inkFaint} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 4L8 10" stroke={T.inkFaint} strokeWidth="1.5" strokeLinecap="round"/><path d="M8 6H5a1 1 0 00-1 1v6a1 1 0 001 1h6a1 1 0 001-1v-3" stroke={T.inkFaint} strokeWidth="1.5" strokeLinecap="round"/></svg>
+  </a>;
 }
 
 Object.assign(window,{Upload,Correction,History,Profile});
