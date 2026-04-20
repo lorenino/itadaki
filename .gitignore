@@ -58,5 +58,8 @@ build/
 ### OS files ###
 .DS_Store
 Thumbs.db
+
+###others###
 .claude
 CLUADE.md
+.metals/
