@@ -41,10 +41,11 @@ public class DataSeeder {
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void seed() {
-        long totalUsers = userRepository.count();
-        // Si plus d'1 utilisateur (l'admin), le seed a déjà été fait
-        if (totalUsers > 1) {
-            log.info("DataSeeder : {} utilisateurs détectés, seed ignoré.", totalUsers);
+        // Check idempotent par email : on seed UNIQUEMENT les comptes démo
+        // absents. Ne depend pas du count global (permet de seeder meme quand
+        // d'autres utilisateurs de test existent deja).
+        if (userRepository.existsByEmail("kenji@itadaki.demo")) {
+            log.info("DataSeeder : comptes demo deja presents, seed ignore.");
             return;
         }
 
