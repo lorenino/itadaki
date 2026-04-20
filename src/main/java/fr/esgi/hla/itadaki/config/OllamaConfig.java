@@ -33,8 +33,10 @@ public class OllamaConfig {
 
     @Bean
     public RestClient ollamaRestClient(@Value("${spring.ai.ollama.base-url}") String baseUrl) {
+        // 5 min pour absorber cold start (~50s) + latence ngrok + analyse image
+        // complexe (jusqu'a 2-3 min sur qwen2.5vl:7b pour une photo dense).
         HttpClient httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofMinutes(3));
+                .responseTimeout(Duration.ofMinutes(5));
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("ngrok-skip-browser-warning", "any")

@@ -370,9 +370,10 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       let postErr = null;
       const postPromise = API.analyses.analyze(mealId).catch(e => { postErr = e; });
 
-      // Polling GET toutes les 2s, max 3 min (90 iterations)
+      // Polling GET toutes les 2s, max 5 min (150 iterations) — aligne avec
+      // OllamaConfig.responseTimeout(5min) + marge
       let analysisRes = null;
-      const maxAttempts = 90;
+      const maxAttempts = 150;
       for (let i = 0; i < maxAttempts; i++) {
         await new Promise(r => setTimeout(r, 2000));
         try {
@@ -388,7 +389,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
         setProg(30 + Math.min(65, i));
       }
       if (!analysisRes) {
-        throw { status: 504, body: 'Analyse trop longue (>3 min). Reessayez.' };
+        throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
       }
       setProg(100);
 
@@ -578,21 +579,26 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
     setLd(true);
     setApiErr('');
     try {
-      // Fire-and-forget + polling (meme pattern que analyze() : ngrok peut
-      // couper la connexion avant que le POST reponde, mais le back persiste
-      // l'analyse en BDD). On compare le timestamp analyzedAt pour detecter
-      // la nouvelle analyse (elle remplace l'ancienne via deleteByMealId).
-      const oldAnalyzedAt = meal.analysisRaw?.analyzedAt || meal.date || '';
+      // Fire-and-forget + polling. Le back UPSERT conserve le meme id et parfois
+      // le meme analyzedAt (@CreationTimestamp Hibernate ne se remplace pas a
+      // l'update). On compare donc le CONTENU : detectedDishName + items + kcal
+      // changent quand le LLM integre le hint.
+      const snapshot = (r) => JSON.stringify([
+        r?.detectedDishName || '',
+        (r?.detectedItems || []).map(i => i.name || '').join('|'),
+        r?.estimatedTotalCalories || 0,
+      ]);
+      const oldSnap = snapshot(meal.analysisRaw);
       let postErr = null;
       const postPromise = API.analyses.reanalyze(mealId, hint.trim())
         .catch(e => { postErr = e; return null; });
 
       let res = null;
-      for (let i = 0; i < 90; i++) { // 90 * 2s = 3 min max
+      for (let i = 0; i < 150; i++) { // 150 * 2s = 5 min max
         await new Promise(r => setTimeout(r, 2000));
         try {
           const r = await API.analyses.get(mealId);
-          if (r && r.id && r.analyzedAt && r.analyzedAt !== oldAnalyzedAt) {
+          if (r && r.id && snapshot(r) !== oldSnap) {
             res = r;
             break;
           }
@@ -607,7 +613,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
       if (!res) {
         res = await postPromise;
       }
-      if (!res) throw { status: 504, body: '2e passe trop longue (>3 min)' };
+      if (!res) throw { status: 504, body: '2e passe trop longue (>5 min)' };
 
       const updated = {
         ...meal,
