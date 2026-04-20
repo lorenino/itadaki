@@ -1,9 +1,9 @@
-# Script pour lancer ngrok
-# Usage: . automation/start-ngrok.ps1
+# Start ngrok tunnel
+$NGROK_PATH = "C:\ngrok\ngrok.exe"
 
-Write-Host "Lancement ngrok sur port 11434..." -ForegroundColor Green
-Start-Process -FilePath "C:\ngrok\ngrok.exe" -ArgumentList "http 11434"
+Write-Host "Starting ngrok tunnel on port 11434..." -ForegroundColor Green
+Start-Process -FilePath $NGROK_PATH -ArgumentList "http 11434"
 
 Start-Sleep -Seconds 3
-Write-Host "✅ ngrok lancé - Note l'URL affichée dans la nouvelle fenêtre" -ForegroundColor Green
+Write-Host "Ngrok started - Note the URL displayed in the ngrok window" -ForegroundColor Green
 

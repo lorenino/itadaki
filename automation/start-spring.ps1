@@ -1,10 +1,8 @@
-# Script pour lancer Spring Boot
-# Usage: . automation/start-spring.ps1
+# Start Spring Boot
+$PROJECT_ROOT = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
-$PROJECT_PATH = "C:\Users\letai\OneDrive\Bureau\ESGI\Hackathon\itadaki"
-
-Write-Host "Lancement Spring Boot..." -ForegroundColor Green
-Push-Location $PROJECT_PATH
+Write-Host "Starting Spring Boot..." -ForegroundColor Green
+Push-Location $PROJECT_ROOT
 mvn spring-boot:run
 Pop-Location
 
