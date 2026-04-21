@@ -58,6 +58,50 @@ const API = {
     reanalyze: (mealId, hint) =>
       API.call('POST', '/api/analyses/' + mealId, { body: { hint } }),
     get: (mealId) => API.call('GET', '/api/analyses/' + mealId),
+    // Streaming NDJSON : fetch + ReadableStream parse ligne par ligne.
+    // Le back emet {type:"token"|"complete"|"error"} par ligne.
+    // Resout avec l'analyse finale, rejette si error event ou reseau KO.
+    stream: async (mealId, hint, onToken) => {
+      const token = localStorage.getItem('itadaki.token');
+      const res = await fetch('/api/analyses/stream/' + mealId, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(hint ? { hint } : {}),
+      });
+      if (!res.ok) {
+        let body = ''; try { body = await res.text(); } catch {}
+        throw { status: res.status, body };
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalAnalysis = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.type === 'token') onToken?.(msg.content);
+            else if (msg.type === 'complete') finalAnalysis = msg.analysis;
+            else if (msg.type === 'error') throw { body: msg.message || 'stream error' };
+          } catch (e) {
+            if (e && e.body) throw e; // vraie erreur metier propagee
+            // sinon ligne non-parsable, on ignore
+          }
+        }
+      }
+      if (!finalAnalysis) throw { body: 'Stream termine sans resultat' };
+      return finalAnalysis;
+    },
   },
 
   history: {
@@ -71,6 +115,8 @@ const API = {
     daily: (from, to) =>
       API.call('GET', '/api/stats/daily?from=' + from + '&to=' + to),
     streak: () => API.call('GET', '/api/stats/streak'),
+    weeklySummary: () => API.call('GET', '/api/stats/weekly-summary'),
+    mealSuggestion: () => API.call('GET', '/api/stats/meal-suggestion'),
   },
 
   corrections: {
@@ -362,6 +408,8 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   const [drag, setDrag] = useState(false);
   const [prog, setProg] = useState(0);
   const [apiErr, setApiErr] = useState('');
+  // Tokens Ollama accumules pendant le streaming (mode #1 wow : brain dump live)
+  const [liveTokens, setLiveTokens] = useState('');
   const fileRef = useRef();
 
   const pick = (f) => {
@@ -376,6 +424,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     setStage('loading');
     setProg(10);
     setApiErr('');
+    setLiveTokens('');
     try {
       // Etape 0 — resize + compress pour reduire le payload (photos smartphone 16-30Mo).
       // Qwen2.5-VL accepte 1280px large largement. JPEG 0.85 => ~300-600Ko.
@@ -384,35 +433,38 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       // Etape 1 — upload image (compressee)
       const uploadRes = await API.meals.upload(compressed);
       const mealId = uploadRes.mealId;
-      setProg(30);
+      setProg(20);
 
-      // Etape 2 — declenche l'analyse IA en background (fire-and-forget)
-      // Le POST peut prendre 60-150s via ngrok qui peut couper la connexion.
-      // On ignore sa reponse et on poll GET /api/analyses/{mealId} jusqu'a
-      // ce que l'analyse soit persistee cote back.
-      let postErr = null;
-      const postPromise = API.analyses.analyze(mealId).catch(e => { postErr = e; });
-
-      // Polling GET toutes les 2s, max 5 min (150 iterations) — aligne avec
-      // OllamaConfig.responseTimeout(5min) + marge
+      // Etape 2 — streaming : les tokens qwen2.5vl arrivent en direct via NDJSON.
+      // Progression basee sur la longueur du JSON typique (~500 chars).
+      // En cas de KO stream (ngrok buffer, CORS, etc.), fallback polling.
       let analysisRes = null;
-      const maxAttempts = 150;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const r = await API.analyses.get(mealId);
-          if (r && r.id) { analysisRes = r; break; }
-        } catch (e) {
-          if (e.status !== 404) throw e; // erreur reseau reelle
+      try {
+        let acc = '';
+        analysisRes = await API.analyses.stream(mealId, null, (token) => {
+          acc += token;
+          setLiveTokens(acc);
+          setProg(20 + Math.min(75, Math.floor(acc.length / 7)));
+        });
+      } catch (streamErr) {
+        console.warn('Stream fail, fallback polling:', streamErr);
+        // Fallback : l'ancien flow fire-and-forget + polling
+        let postErr = null;
+        API.analyses.analyze(mealId).catch(e => { postErr = e; });
+        for (let i = 0; i < 150; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            const r = await API.analyses.get(mealId);
+            if (r && r.id) { analysisRes = r; break; }
+          } catch (e) {
+            if (e.status !== 404) throw e;
+          }
+          if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+            throw postErr;
+          }
+          setProg(30 + Math.min(65, i));
         }
-        // Si le POST a crash avec autre chose qu'un timeout reseau, propage
-        if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
-          throw postErr;
-        }
-        setProg(30 + Math.min(65, i));
-      }
-      if (!analysisRes) {
-        throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
+        if (!analysisRes) throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
       }
       setProg(100);
 
@@ -556,6 +608,31 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
               <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
             </div>
           </div>
+
+          {/* Brain dump : tokens qwen streames en direct via NDJSON */}
+          {liveTokens && (
+            <div style={{
+              width: mobile ? 300 : 380,
+              padding: '12px 14px',
+              background: '#0f0f10',
+              border: '1px solid #26262a',
+              borderRadius: 14,
+              fontFamily: 'JetBrains Mono,monospace',
+              textAlign: 'left',
+              maxHeight: 120,
+              overflow: 'hidden',
+              position: 'relative',
+            }}>
+              <style>{'@keyframes blink { 50% { opacity: 0; } }'}</style>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.14em', color: '#6b7280', marginBottom: 6 }}>
+                qwen2.5vl · pensée en direct
+              </div>
+              <div style={{ fontSize: 10.5, color: '#e5e7eb', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.45 }}>
+                {liveTokens.length > 240 ? '…' + liveTokens.slice(-240) : liveTokens}
+                <span style={{ color: T.accent, animation: 'blink 1s step-end infinite' }}>▋</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 18 : 22, letterSpacing: '-.02em', marginTop: 24, fontStyle: 'italic', fontWeight: 500, color: T.inkMuted }}>{phases[phase].title.replace(/…$/, '')}</div>
@@ -1222,6 +1299,208 @@ function AdminPageWired({ T, currentUser, mobile }) {
   );
 }
 
+// ─── Coach IA — Bouton flottant + panel (bilan hebdo + suggestion de repas) ──
+// Monte au-dessus de tous les ecrans authentifies. Au clic, ouvre un panel
+// avec 2 actions : bilan narratif de la semaine, suggestion du prochain repas.
+// Les appels LLM prennent 5-30s (cold start Ollama) donc on affiche un loader.
+function CoachFab({ T, mobile }) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState('menu'); // 'menu' | 'summary' | 'suggestion'
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [summary, setSummary] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+  // Effet typewriter : affiche `summary.summary` caractere par caractere
+  const [typed, setTyped] = useState('');
+
+  useEffect(() => {
+    if (view !== 'summary' || !summary || !summary.summary) { setTyped(''); return; }
+    let i = 0;
+    const full = summary.summary;
+    setTyped('');
+    const id = setInterval(() => {
+      i++;
+      setTyped(full.slice(0, i));
+      if (i >= full.length) clearInterval(id);
+    }, 18);
+    return () => clearInterval(id);
+  }, [summary, view]);
+
+  const loadSummary = async () => {
+    setView('summary'); setLoading(true); setErr(''); setSummary(null);
+    try { setSummary(await API.stats.weeklySummary()); }
+    catch (e) { setErr('Coach indisponible : ' + (e.body || e.message || 'erreur')); }
+    finally { setLoading(false); }
+  };
+
+  const loadSuggestion = async () => {
+    setView('suggestion'); setLoading(true); setErr(''); setSuggestion(null);
+    try { setSuggestion(await API.stats.mealSuggestion()); }
+    catch (e) { setErr('Coach indisponible : ' + (e.body || e.message || 'erreur')); }
+    finally { setLoading(false); }
+  };
+
+  const close = () => { setOpen(false); setView('menu'); setErr(''); };
+
+  const mealTypeLabel = (t) => ({ BREAKFAST: 'Petit-dejeuner', LUNCH: 'Dejeuner', SNACK: 'Gouter', DINNER: 'Diner' }[t] || 'Prochain repas');
+
+  const fabSize = mobile ? 56 : 60;
+  const fabBottom = mobile ? 80 : 28;
+
+  return (
+    <>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          title="Ton coach IA"
+          style={{
+            position: 'fixed', bottom: fabBottom, right: 22,
+            width: fabSize, height: fabSize, borderRadius: '50%',
+            background: 'linear-gradient(135deg, ' + T.accent + ', ' + T.matcha + ')',
+            color: '#fff', border: 'none', cursor: 'pointer',
+            boxShadow: '0 12px 28px -6px rgba(80,40,10,.45), 0 0 0 4px ' + T.bg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 200, fontSize: 24,
+            animation: 'coachPulse 2.4s ease-in-out infinite',
+          }}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="currentColor"/>
+          </svg>
+          <style>{'@keyframes coachPulse {0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}'}</style>
+        </button>
+      )}
+
+      {open && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 300,
+          background: 'rgba(20,14,8,0.55)',
+          display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center',
+          padding: mobile ? 0 : 24,
+          animation: 'fadeIn .25s ease',
+        }} onClick={close}>
+          <style>{'@keyframes fadeIn {from{opacity:0}to{opacity:1}} @keyframes slideUp {from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}'}</style>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: mobile ? '100%' : 520, maxHeight: mobile ? '88vh' : '80vh',
+            background: T.bg, color: T.ink,
+            borderRadius: mobile ? '22px 22px 0 0' : 24,
+            boxShadow: '0 40px 80px -20px rgba(80,40,10,.45)',
+            overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            animation: 'slideUp .3s ease',
+          }}>
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid ' + T.hairline, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: 'linear-gradient(135deg,' + T.accent + ',' + T.matcha + ')', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontFamily: '"Fraunces",serif', fontSize: 20, fontWeight: 500, letterSpacing: '-.02em' }}>Coach <span style={{ fontStyle: 'italic', color: T.accent }}>IA</span></div>
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, color: T.inkFaint, textTransform: 'uppercase', letterSpacing: '.08em' }}>Propulse par qwen2.5vl</div>
+                </div>
+              </div>
+              <button onClick={close} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: T.bgAlt, color: T.inkMuted, cursor: 'pointer' }}>×</button>
+            </div>
+
+            <div style={{ padding: 22, overflowY: 'auto', flex: 1 }}>
+              {view === 'menu' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13.5, color: T.inkMuted, marginBottom: 4, lineHeight: 1.55 }}>
+                    Deux choses que je peux faire pour toi :
+                  </div>
+                  <button onClick={loadSummary} style={{
+                    textAlign: 'left', padding: 16, border: '1px solid ' + T.hairline, borderRadius: 16,
+                    background: T.bgAlt, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start',
+                  }}>
+                    <div style={{ fontSize: 26 }}>📖</div>
+                    <div>
+                      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 14, fontWeight: 600, color: T.ink }}>Mon bilan de la semaine</div>
+                      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, marginTop: 2 }}>Un resume narratif de tes 7 derniers jours.</div>
+                    </div>
+                  </button>
+                  <button onClick={loadSuggestion} style={{
+                    textAlign: 'left', padding: 16, border: '1px solid ' + T.hairline, borderRadius: 16,
+                    background: T.bgAlt, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start',
+                  }}>
+                    <div style={{ fontSize: 26 }}>🍽️</div>
+                    <div>
+                      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 14, fontWeight: 600, color: T.ink }}>Que manger maintenant ?</div>
+                      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, marginTop: 2 }}>Une suggestion de plat adaptee a tes stats et a l'heure.</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {view !== 'menu' && loading && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', gap: 14 }}>
+                  <Spin size={26} />
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, textAlign: 'center' }}>
+                    Le coach reflechit<br/>
+                    <span style={{ fontSize: 11, color: T.inkFaint }}>(5 a 30s si Ollama demarre a froid)</span>
+                  </div>
+                </div>
+              )}
+
+              {view !== 'menu' && err && !loading && (
+                <div style={{ padding: 16, background: 'oklch(0.95 0.03 25)', border: '1px solid ' + T.danger, borderRadius: 12, color: T.danger, fontFamily: 'Inter,system-ui', fontSize: 13 }}>
+                  {err}
+                </div>
+              )}
+
+              {view === 'summary' && summary && !loading && (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <div style={{ padding: '8px 14px', background: T.accentSoft, color: T.accentDeep, borderRadius: 999, fontFamily: 'JetBrains Mono,monospace', fontSize: 12, fontWeight: 600 }}>
+                      {summary.mealCount} repas
+                    </div>
+                    <div style={{ padding: '8px 14px', background: T.matchaSoft, color: T.inkMuted, borderRadius: 999, fontFamily: 'JetBrains Mono,monospace', fontSize: 12, fontWeight: 600 }}>
+                      {Math.round(summary.totalCalories || 0)} kcal total
+                    </div>
+                    {summary.bestDay && (
+                      <div style={{ padding: '8px 14px', background: T.bgAlt, color: T.inkMuted, borderRadius: 999, fontFamily: 'JetBrains Mono,monospace', fontSize: 12 }}>
+                        top : {summary.bestDay} ({Math.round(summary.bestDayCalories || 0)} kcal)
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: '"Fraunces",serif', fontSize: 18, color: T.ink, lineHeight: 1.55, letterSpacing: '-.01em', minHeight: 80 }}>
+                    {typed}<span style={{ opacity: typed.length < (summary.summary || '').length ? 1 : 0, color: T.accent }}>▋</span>
+                  </div>
+                </div>
+              )}
+
+              {view === 'suggestion' && suggestion && !loading && (
+                <div>
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: T.inkFaint, marginBottom: 8 }}>
+                    {mealTypeLabel(suggestion.mealType)}
+                  </div>
+                  <div style={{ fontFamily: '"Fraunces",serif', fontSize: 30, color: T.ink, letterSpacing: '-.02em', lineHeight: 1.1, fontWeight: 500 }}>
+                    <span style={{ fontStyle: 'italic', color: T.accent }}>{suggestion.dishName}</span>
+                  </div>
+                  {suggestion.estimatedCalories != null && (
+                    <div style={{ marginTop: 8, fontFamily: 'JetBrains Mono,monospace', fontSize: 14, color: T.inkMuted }}>
+                      ~ {suggestion.estimatedCalories} kcal
+                    </div>
+                  )}
+                  {suggestion.reason && (
+                    <div style={{ marginTop: 14, padding: 14, background: T.accentSoft, color: T.accentDeep, borderRadius: 14, fontFamily: 'Inter,system-ui', fontSize: 13.5, lineHeight: 1.55 }}>
+                      {suggestion.reason}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {view !== 'menu' && !loading && (
+                <div style={{ marginTop: 20 }}>
+                  <Btn T={T} variant="ghost" onClick={() => { setView('menu'); setErr(''); }}>← Retour</Btn>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── App principale — Router SPA ──────────────────────────────────────────────
 function App() {
   const [dark, setDark] = useState(() => {
@@ -1369,6 +1648,10 @@ function App() {
       overflow: 'hidden',
     }}>
       {content}
+      {/* Coach IA flottant, visible sur tous les ecrans authentifies sauf upload/correction */}
+      {user && !['auth', 'upload', 'correction'].includes(effectiveScreen) && (
+        <CoachFab T={T} mobile={isMobile} />
+      )}
     </div>
   );
 }

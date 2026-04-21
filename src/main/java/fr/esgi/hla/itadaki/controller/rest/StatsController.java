@@ -2,8 +2,10 @@ package fr.esgi.hla.itadaki.controller.rest;
 
 import fr.esgi.hla.itadaki.annotation.CurrentUser;
 import fr.esgi.hla.itadaki.dto.stats.DailyCaloriesDto;
+import fr.esgi.hla.itadaki.dto.stats.DinnerSuggestionDto;
 import fr.esgi.hla.itadaki.dto.stats.StatsOverviewDto;
 import fr.esgi.hla.itadaki.dto.stats.StreakDto;
+import fr.esgi.hla.itadaki.dto.stats.WeeklySummaryDto;
 import fr.esgi.hla.itadaki.service.StatsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -54,5 +56,19 @@ public class StatsController {
     @Operation(summary = "Get consecutive active days streak for authenticated user")
     public StreakDto getStreak(@CurrentUser Long userId) {
         return statsService.getStreak(userId);
+    }
+
+    @GetMapping("/weekly-summary")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "AI-generated narrative summary of last 7 days")
+    public WeeklySummaryDto getWeeklySummary(@CurrentUser Long userId) {
+        return statsService.getWeeklySummary(userId);
+    }
+
+    @GetMapping("/meal-suggestion")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "AI-generated meal suggestion based on recent intake and current time")
+    public DinnerSuggestionDto getMealSuggestion(@CurrentUser Long userId) {
+        return statsService.getMealSuggestion(userId);
     }
 }

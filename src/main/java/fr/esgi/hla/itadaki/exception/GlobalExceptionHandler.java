@@ -2,6 +2,7 @@ package fr.esgi.hla.itadaki.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -44,6 +45,14 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ErrorResponse handleForbidden(ForbiddenException ex, HttpServletRequest request) {
         return new ErrorResponse(HttpStatus.FORBIDDEN.value(), ex.getMessage(), request.getRequestURI());
+    }
+
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ErrorResponse handleAccessDenied(AuthorizationDeniedException ex, HttpServletRequest request) {
+        // Declenchee par @PreAuthorize quand le role attendu n'est pas present.
+        // Sans ce handler, tombait dans le fallback generic -> 500.
+        return new ErrorResponse(HttpStatus.FORBIDDEN.value(), "Access denied", request.getRequestURI());
     }
 
     @ExceptionHandler(ConflictException.class)

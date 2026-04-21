@@ -89,6 +89,55 @@ public class AnalysisServiceImpl implements AnalysisService {
         return toResponseDto(analysis, analysis.getDetectedItemsJson());
     }
 
+    @Override
+    public void markAnalysing(Long mealId) {
+        Meal meal = mealRepository.findById(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+        meal.setStatus(MealStatus.ANALYSING);
+        mealRepository.save(meal);
+    }
+
+    @Override
+    public void markFailed(Long mealId) {
+        mealRepository.findById(mealId).ifPresent(m -> {
+            m.setStatus(MealStatus.FAILED);
+            mealRepository.save(m);
+        });
+    }
+
+    @Override
+    public MealAnalysisResponseDto persistStreamResult(Long mealId, String rawJson) {
+        try {
+            Meal meal = mealRepository.findById(mealId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+
+            JsonNode node = objectMapper.readTree(rawJson);
+
+            // UPSERT : reutilise l'analyse existante si dispo (cas reanalyze stream)
+            MealAnalysis analysis = mealAnalysisRepository.findByMealId(mealId)
+                    .orElseGet(() -> {
+                        MealAnalysis a = new MealAnalysis();
+                        a.setMeal(meal);
+                        return a;
+                    });
+            analysis.setDetectedDishName(extractString(node, "nomPlat"));
+            analysis.setDetectedItemsJson(rawJson);
+            analysis.setEstimatedTotalCalories(extractCalories(node));
+            analysis.setConfidenceScore(parseConfidence(extractString(node, "confiance")));
+            analysis.setRawModelResponse(rawJson);
+            analysis.setAnalyzedAt(java.time.LocalDateTime.now());
+
+            analysis = mealAnalysisRepository.save(analysis);
+
+            meal.setStatus(MealStatus.ANALYSED);
+            mealRepository.save(meal);
+
+            return toResponseDto(analysis, rawJson);
+        } catch (Exception ex) {
+            throw new MealAnalysisException("Failed to persist stream result: " + ex.getMessage(), ex);
+        }
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private Meal findMeal(Long mealId) {
@@ -123,7 +172,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         analysis.setRawModelResponse(rawResponse);
     }
 
-    /** Builds response DTO via MapStruct then injects detectedItems parsed from raw JSON. */
+    // Builds response DTO via MapStruct then injects detectedItems parsed from raw JSON.
     private MealAnalysisResponseDto toResponseDto(MealAnalysis analysis, String itemsJson) {
         MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
         return new MealAnalysisResponseDto(
