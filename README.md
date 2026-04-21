@@ -25,7 +25,7 @@ Le menu interactif s'ouvre automatiquement.
 
 | Outil  | Version | Lien                                                  |
 |--------|---------|-------------------------------------------------------|
-| Java   | 21+     | https://www.oracle.com/java/technologies/downloads/   |
+| Java   | 25      | https://www.oracle.com/java/technologies/downloads/   |
 | Ollama | latest  | https://ollama.com/download                           |
 | ngrok  | latest  | https://ngrok.com/download/windows                    |
 
