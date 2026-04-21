@@ -40,4 +40,18 @@ public interface OllamaService {
      * @return contenu textuel brut retourne par le modele
      */
     String chatText(String systemPrompt, String userPrompt, boolean jsonMode);
+
+    /**
+     * Variante streaming de {@link #analyzeImage(String, String)}.
+     * Lit les chunks NDJSON d'Ollama au fur et a mesure et appelle onToken
+     * pour chaque fragment de content. Retourne le contenu concatene complet
+     * a la fin pour parsing/persistence.
+     *
+     * @param imagePath chemin local de l'image
+     * @param prompt    prompt user
+     * @param onToken   callback invoque pour chaque fragment recu (peut etre
+     *                  appele un grand nombre de fois, ~1 par token)
+     * @return contenu complet (concatenation de tous les tokens)
+     */
+    String streamAnalyzeImage(String imagePath, String prompt, java.util.function.Consumer<String> onToken);
 }

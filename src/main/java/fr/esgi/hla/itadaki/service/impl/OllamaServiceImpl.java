@@ -1,6 +1,8 @@
 package fr.esgi.hla.itadaki.service.impl;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import fr.esgi.hla.itadaki.exception.MealAnalysisException;
 import fr.esgi.hla.itadaki.service.OllamaService;
 import lombok.RequiredArgsConstructor;
@@ -10,11 +12,18 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Implements OllamaService using a plain {@link RestClient} (not Spring AI ChatClient)
@@ -72,9 +81,13 @@ public class OllamaServiceImpl implements OllamaService {
             "Identifie ce plat, liste les ingrédients visibles et estime les calories.";
 
     private final RestClient ollamaRestClient;
+    private final ObjectMapper objectMapper;
 
     @Value("${spring.ai.ollama.chat.model}")
     private String model;
+
+    @Value("${spring.ai.ollama.base-url}")
+    private String baseUrl;
 
     @Override
     public String analyzeImage(String imagePath, String prompt) {
@@ -157,6 +170,81 @@ public class OllamaServiceImpl implements OllamaService {
         } catch (Exception ex) {
             log.error("Ollama chatText failed: {}", ex.getMessage(), ex);
             throw new MealAnalysisException("Ollama chatText failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public String streamAnalyzeImage(String imagePath, String prompt, Consumer<String> onToken) {
+        try {
+            byte[] bytes = Files.readAllBytes(Path.of(imagePath));
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+
+            Map<String, Object> body = Map.of(
+                    "model", model,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", SYSTEM_PROMPT),
+                            Map.of(
+                                    "role", "user",
+                                    "content", prompt == null || prompt.isBlank() ? DEFAULT_USER_PROMPT : prompt,
+                                    "images", List.of(base64)
+                            )
+                    ),
+                    "stream", true,
+                    "format", "json",
+                    "options", Map.of(
+                            "temperature", 0.2,
+                            "num_ctx", 4096
+                    )
+            );
+            String jsonBody = objectMapper.writeValueAsString(body);
+
+            // JDK HttpClient natif : stream=true => Ollama emet une ligne NDJSON par token.
+            // On contourne Spring RestClient (pas d'API streaming simple en 2.0-M4).
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(30))
+                    .build();
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/chat"))
+                    .timeout(Duration.ofMinutes(10))
+                    .header("Content-Type", "application/json")
+                    .header("ngrok-skip-browser-warning", "any")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<Stream<String>> response = client.send(req, HttpResponse.BodyHandlers.ofLines());
+            if (response.statusCode() >= 400) {
+                throw new MealAnalysisException("Ollama returned HTTP " + response.statusCode());
+            }
+
+            StringBuilder full = new StringBuilder();
+            try (Stream<String> lines = response.body()) {
+                lines.forEach(line -> {
+                    if (line.isBlank()) return;
+                    try {
+                        JsonNode node = objectMapper.readTree(line);
+                        JsonNode msg = node.get("message");
+                        if (msg != null) {
+                            JsonNode content = msg.get("content");
+                            if (content != null && content.isTextual()) {
+                                String token = content.asText();
+                                if (!token.isEmpty()) {
+                                    full.append(token);
+                                    try { onToken.accept(token); } catch (Exception ignored) { /* ne pas bloquer le stream */ }
+                                }
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Could not parse Ollama stream line: {}", line);
+                    }
+                });
+            }
+            return full.toString();
+
+        } catch (MealAnalysisException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Ollama streaming analysis failed for image {}: {}", imagePath, ex.getMessage(), ex);
+            throw new MealAnalysisException("Ollama streaming analysis failed: " + ex.getMessage(), ex);
         }
     }
 

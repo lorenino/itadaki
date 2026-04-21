@@ -58,6 +58,50 @@ const API = {
     reanalyze: (mealId, hint) =>
       API.call('POST', '/api/analyses/' + mealId, { body: { hint } }),
     get: (mealId) => API.call('GET', '/api/analyses/' + mealId),
+    // Streaming NDJSON : fetch + ReadableStream parse ligne par ligne.
+    // Le back emet {type:"token"|"complete"|"error"} par ligne.
+    // Resout avec l'analyse finale, rejette si error event ou reseau KO.
+    stream: async (mealId, hint, onToken) => {
+      const token = localStorage.getItem('itadaki.token');
+      const res = await fetch('/api/analyses/stream/' + mealId, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(hint ? { hint } : {}),
+      });
+      if (!res.ok) {
+        let body = ''; try { body = await res.text(); } catch {}
+        throw { status: res.status, body };
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalAnalysis = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.type === 'token') onToken?.(msg.content);
+            else if (msg.type === 'complete') finalAnalysis = msg.analysis;
+            else if (msg.type === 'error') throw { body: msg.message || 'stream error' };
+          } catch (e) {
+            if (e && e.body) throw e; // vraie erreur metier propagee
+            // sinon ligne non-parsable, on ignore
+          }
+        }
+      }
+      if (!finalAnalysis) throw { body: 'Stream termine sans resultat' };
+      return finalAnalysis;
+    },
   },
 
   history: {
@@ -365,6 +409,8 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   const [prog, setProg] = useState(0);
   const [loadVar] = useState(() => Math.floor(Math.random() * 3));
   const [apiErr, setApiErr] = useState('');
+  // Tokens Ollama accumules pendant le streaming (mode #1 wow : brain dump live)
+  const [liveTokens, setLiveTokens] = useState('');
   const fileRef = useRef();
 
   const pick = (f) => {
@@ -379,6 +425,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     setStage('loading');
     setProg(10);
     setApiErr('');
+    setLiveTokens('');
     try {
       // Etape 0 — resize + compress pour reduire le payload (photos smartphone 16-30Mo).
       // Qwen2.5-VL accepte 1280px large largement. JPEG 0.85 => ~300-600Ko.
@@ -387,35 +434,38 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       // Etape 1 — upload image (compressee)
       const uploadRes = await API.meals.upload(compressed);
       const mealId = uploadRes.mealId;
-      setProg(30);
+      setProg(20);
 
-      // Etape 2 — declenche l'analyse IA en background (fire-and-forget)
-      // Le POST peut prendre 60-150s via ngrok qui peut couper la connexion.
-      // On ignore sa reponse et on poll GET /api/analyses/{mealId} jusqu'a
-      // ce que l'analyse soit persistee cote back.
-      let postErr = null;
-      const postPromise = API.analyses.analyze(mealId).catch(e => { postErr = e; });
-
-      // Polling GET toutes les 2s, max 5 min (150 iterations) — aligne avec
-      // OllamaConfig.responseTimeout(5min) + marge
+      // Etape 2 — streaming : les tokens qwen2.5vl arrivent en direct via NDJSON.
+      // Progression basee sur la longueur du JSON typique (~500 chars).
+      // En cas de KO stream (ngrok buffer, CORS, etc.), fallback polling.
       let analysisRes = null;
-      const maxAttempts = 150;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const r = await API.analyses.get(mealId);
-          if (r && r.id) { analysisRes = r; break; }
-        } catch (e) {
-          if (e.status !== 404) throw e; // erreur reseau reelle
+      try {
+        let acc = '';
+        analysisRes = await API.analyses.stream(mealId, null, (token) => {
+          acc += token;
+          setLiveTokens(acc);
+          setProg(20 + Math.min(75, Math.floor(acc.length / 7)));
+        });
+      } catch (streamErr) {
+        console.warn('Stream fail, fallback polling:', streamErr);
+        // Fallback : l'ancien flow fire-and-forget + polling
+        let postErr = null;
+        API.analyses.analyze(mealId).catch(e => { postErr = e; });
+        for (let i = 0; i < 150; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          try {
+            const r = await API.analyses.get(mealId);
+            if (r && r.id) { analysisRes = r; break; }
+          } catch (e) {
+            if (e.status !== 404) throw e;
+          }
+          if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+            throw postErr;
+          }
+          setProg(30 + Math.min(65, i));
         }
-        // Si le POST a crash avec autre chose qu'un timeout reseau, propage
-        if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
-          throw postErr;
-        }
-        setProg(30 + Math.min(65, i));
-      }
-      if (!analysisRes) {
-        throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
+        if (!analysisRes) throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
       }
       setProg(100);
 
@@ -559,6 +609,31 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
               <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
             </div>
           </div>
+
+          {/* Brain dump : tokens qwen streames en direct via NDJSON */}
+          {liveTokens && (
+            <div style={{
+              width: mobile ? 300 : 380,
+              padding: '12px 14px',
+              background: '#0f0f10',
+              border: '1px solid #26262a',
+              borderRadius: 14,
+              fontFamily: 'JetBrains Mono,monospace',
+              textAlign: 'left',
+              maxHeight: 120,
+              overflow: 'hidden',
+              position: 'relative',
+            }}>
+              <style>{'@keyframes blink { 50% { opacity: 0; } }'}</style>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.14em', color: '#6b7280', marginBottom: 6 }}>
+                qwen2.5vl · pensée en direct
+              </div>
+              <div style={{ fontSize: 10.5, color: '#e5e7eb', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.45 }}>
+                {liveTokens.length > 240 ? '…' + liveTokens.slice(-240) : liveTokens}
+                <span style={{ color: T.accent, animation: 'blink 1s step-end infinite' }}>▋</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 18 : 22, letterSpacing: '-.02em', marginTop: 24, fontStyle: 'italic', fontWeight: 500, color: T.inkMuted }}>{phases[phase].title.replace(/…$/, '')}</div>
