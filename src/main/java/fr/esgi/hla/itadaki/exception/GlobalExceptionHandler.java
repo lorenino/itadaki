@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -53,6 +54,18 @@ public class GlobalExceptionHandler {
         // Declenchee par @PreAuthorize quand le role attendu n'est pas present.
         // Sans ce handler, tombait dans le fallback generic -> 500.
         return new ErrorResponse(HttpStatus.FORBIDDEN.value(), "Access denied", request.getRequestURI());
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+        // Ressource statique introuvable (favicon.ico, /uploads/demo/*.jpg manquants, etc.).
+        // Sans ce handler explicite, le fallback generic la mappait en 500
+        // (au lieu du 404 attendu), spammant les logs et faisant apparaitre des erreurs
+        // dans la console du navigateur.
+        return new ErrorResponse(HttpStatus.NOT_FOUND.value(),
+                "Resource not found: " + ex.getResourcePath(),
+                request.getRequestURI());
     }
 
     @ExceptionHandler(ConflictException.class)
