@@ -28,4 +28,16 @@ public interface OllamaService {
      * @return the user prompt string (system prompt is handled internally by the service)
      */
     String buildMealAnalysisPrompt(String hint);
+
+    /**
+     * Appel texte pur (pas d'image) au modele Ollama. Utilise pour le bilan hebdo
+     * et les suggestions de plats. Garde stream=false pour une reponse atomique.
+     *
+     * @param systemPrompt instruction systeme (ex. persona coach, format attendu)
+     * @param userPrompt   message utilisateur (ex. stats a resumer)
+     * @param jsonMode     true pour forcer format=json (reponses structurees),
+     *                     false pour prose libre
+     * @return contenu textuel brut retourne par le modele
+     */
+    String chatText(String systemPrompt, String userPrompt, boolean jsonMode);
 }

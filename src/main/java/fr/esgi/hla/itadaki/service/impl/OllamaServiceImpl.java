@@ -125,6 +125,42 @@ public class OllamaServiceImpl implements OllamaService {
     }
 
     @Override
+    public String chatText(String systemPrompt, String userPrompt, boolean jsonMode) {
+        try {
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("model", model);
+            body.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", userPrompt)
+            ));
+            body.put("stream", false);
+            if (jsonMode) body.put("format", "json");
+            body.put("options", Map.of(
+                    "temperature", jsonMode ? 0.3 : 0.7,
+                    "num_ctx", 4096
+            ));
+
+            log.debug("Calling Ollama /api/chat text-only (jsonMode={})", jsonMode);
+            OllamaChatResponse response = ollamaRestClient.post()
+                    .uri("/api/chat")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .body(OllamaChatResponse.class);
+
+            if (response == null || response.message() == null || response.message().content() == null) {
+                throw new MealAnalysisException("Ollama returned empty or malformed response");
+            }
+            return response.message().content();
+        } catch (MealAnalysisException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Ollama chatText failed: {}", ex.getMessage(), ex);
+            throw new MealAnalysisException("Ollama chatText failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
     public String buildMealAnalysisPrompt(String hint) {
         if (hint == null || hint.isBlank()) {
             return DEFAULT_USER_PROMPT;

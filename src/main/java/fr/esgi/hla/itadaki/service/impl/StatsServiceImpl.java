@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fr.esgi.hla.itadaki.business.Meal;
 import fr.esgi.hla.itadaki.business.MealAnalysis;
+import fr.esgi.hla.itadaki.business.enums.MealType;
 import fr.esgi.hla.itadaki.dto.stats.DailyCaloriesDto;
+import fr.esgi.hla.itadaki.dto.stats.DinnerSuggestionDto;
 import fr.esgi.hla.itadaki.dto.stats.StatsOverviewDto;
 import fr.esgi.hla.itadaki.dto.stats.StreakDto;
+import fr.esgi.hla.itadaki.dto.stats.WeeklySummaryDto;
 import fr.esgi.hla.itadaki.repository.MealAnalysisRepository;
 import fr.esgi.hla.itadaki.repository.MealRepository;
+import fr.esgi.hla.itadaki.service.OllamaService;
 import fr.esgi.hla.itadaki.service.StatsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +43,7 @@ public class StatsServiceImpl implements StatsService {
     private final MealAnalysisRepository mealAnalysisRepository;
     private final MealRepository mealRepository;
     private final ObjectMapper objectMapper;
+    private final OllamaService ollamaService;
 
     @Override
     public StatsOverviewDto getOverview(Long userId) {
@@ -229,5 +234,189 @@ public class StatsServiceImpl implements StatsService {
         }
 
         return new StreakDto(current, longest);
+    }
+
+    // ─── Fonctionnalites IA : bilan hebdo + suggestion de repas ─────────────
+
+    private static final String SUMMARY_SYSTEM_PROMPT = """
+            Tu es un coach nutrition chaleureux et positif qui tutoie l'utilisateur.
+            Ecris un bilan de 3 a 4 phrases en francais, sans markdown, sans listes.
+            Mentionne 1 force concrete et 1 axe d'amelioration. Reste factuel, pas de morale.
+            Termine par une encouragement court. N'utilise jamais d'emoji.
+            """;
+
+    private static final String SUGGESTION_SYSTEM_PROMPT = """
+            Tu es un coach nutrition qui suggere un plat concret et realiste pour le prochain repas.
+            Retourne UNIQUEMENT du JSON valide selon ce schema, sans markdown ni texte autour :
+            {"dishName": string, "reason": string, "estimatedCalories": integer}
+            - dishName : nom d'un plat reel en francais (ex. "Poke bowl saumon-avocat", "Omelette aux champignons").
+            - reason : 1 phrase courte expliquant pourquoi ce choix vu les stats recentes (tutoiement).
+            - estimatedCalories : estimation realiste en kcal (entier positif entre 200 et 900).
+            """;
+
+    @Override
+    public WeeklySummaryDto getWeeklySummary(Long userId) {
+        LocalDate today = LocalDate.now();
+        LocalDate from = today.minusDays(6);
+        LocalDateTime fromDt = from.atStartOfDay();
+        LocalDateTime toDt = today.plusDays(1).atStartOfDay();
+
+        List<Meal> meals = mealRepository.findAllByUserIdAndUploadedAtBetween(userId, fromDt, toDt);
+
+        // Breakdown par jour
+        Map<LocalDate, Double> byDay = new HashMap<>();
+        double totalKcal = 0;
+        double totalProt = 0, totalCarbs = 0, totalFat = 0;
+        int mealsWithMacros = 0;
+        Map<String, Integer> dishCounts = new HashMap<>();
+
+        for (Meal m : meals) {
+            LocalDate d = m.getUploadedAt().toLocalDate();
+            MealAnalysis a = m.getAnalysis();
+            double kcal = a != null && a.getEstimatedTotalCalories() != null ? a.getEstimatedTotalCalories() : 0;
+            byDay.merge(d, kcal, Double::sum);
+            totalKcal += kcal;
+            if (a != null && a.getDetectedDishName() != null) {
+                dishCounts.merge(a.getDetectedDishName(), 1, Integer::sum);
+            }
+            if (a != null) {
+                double[] macros = extractMealMacros(a.getDetectedItemsJson());
+                if (macros != null) {
+                    totalProt += macros[0];
+                    totalCarbs += macros[1];
+                    totalFat += macros[2];
+                    mealsWithMacros++;
+                }
+            }
+        }
+
+        String bestDay = byDay.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(e -> e.getKey().toString())
+                .orElse(null);
+        Double bestDayKcal = byDay.values().stream().max(Double::compareTo).orElse(null);
+        String topDish = dishCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        String summary;
+        if (meals.size() < 2) {
+            summary = "Pas encore assez de repas cette semaine pour un bilan detaille. Continue a scanner tes plats, et ton coach IA prendra le relais des la semaine prochaine !";
+        } else {
+            double avgKcal = totalKcal / Math.max(byDay.size(), 1);
+            double avgProt = mealsWithMacros > 0 ? totalProt / mealsWithMacros : 0;
+            double avgCarbs = mealsWithMacros > 0 ? totalCarbs / mealsWithMacros : 0;
+            double avgFat = mealsWithMacros > 0 ? totalFat / mealsWithMacros : 0;
+
+            String userPrompt = """
+                    Periode : du %s au %s (%d jours actifs).
+                    Repas scannes : %d. Calories totales : %.0f kcal. Moyenne journaliere : %.0f kcal.
+                    Macros moyennes par repas : proteines %.0f g, glucides %.0f g, lipides %.0f g.
+                    Meilleur jour en apport : %s (%.0f kcal).
+                    Plat le plus frequent : %s.
+                    """.formatted(
+                    from, today, byDay.size(), meals.size(), totalKcal, avgKcal,
+                    avgProt, avgCarbs, avgFat,
+                    bestDay != null ? bestDay : "non defini", bestDayKcal != null ? bestDayKcal : 0,
+                    topDish != null ? topDish : "aucun"
+            );
+
+            try {
+                summary = ollamaService.chatText(SUMMARY_SYSTEM_PROMPT, userPrompt, false).trim();
+            } catch (Exception ex) {
+                log.warn("Weekly summary LLM call failed, using fallback: {}", ex.getMessage());
+                summary = "Tu as scanne %d repas sur les 7 derniers jours pour un total de %.0f kcal. Continue comme ca !"
+                        .formatted(meals.size(), totalKcal);
+            }
+        }
+
+        return new WeeklySummaryDto(
+                summary,
+                from.toString(),
+                today.toString(),
+                meals.size(),
+                totalKcal,
+                bestDay,
+                bestDayKcal
+        );
+    }
+
+    @Override
+    public DinnerSuggestionDto getMealSuggestion(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        MealType nextType = MealType.detectFromTime(now);
+
+        // Contexte : stats 7 derniers jours (reutilise getWeeklySummary en interne)
+        LocalDate today = LocalDate.now();
+        LocalDateTime fromDt = today.minusDays(6).atStartOfDay();
+        LocalDateTime toDt = today.plusDays(1).atStartOfDay();
+        List<Meal> meals = mealRepository.findAllByUserIdAndUploadedAtBetween(userId, fromDt, toDt);
+
+        double totalProt = 0, totalCarbs = 0, totalFat = 0, totalKcal = 0;
+        int mealsWithMacros = 0;
+        Set<String> recentDishes = new HashSet<>();
+        for (Meal m : meals) {
+            MealAnalysis a = m.getAnalysis();
+            if (a == null) continue;
+            if (a.getEstimatedTotalCalories() != null) totalKcal += a.getEstimatedTotalCalories();
+            if (a.getDetectedDishName() != null) recentDishes.add(a.getDetectedDishName());
+            double[] macros = extractMealMacros(a.getDetectedItemsJson());
+            if (macros != null) {
+                totalProt += macros[0];
+                totalCarbs += macros[1];
+                totalFat += macros[2];
+                mealsWithMacros++;
+            }
+        }
+
+        double avgProt = mealsWithMacros > 0 ? totalProt / mealsWithMacros : 0;
+        double avgCarbs = mealsWithMacros > 0 ? totalCarbs / mealsWithMacros : 0;
+        double avgFat = mealsWithMacros > 0 ? totalFat / mealsWithMacros : 0;
+
+        String typeFr = switch (nextType) {
+            case BREAKFAST -> "petit-dejeuner";
+            case LUNCH -> "dejeuner";
+            case SNACK -> "gouter";
+            case DINNER -> "diner";
+        };
+
+        String userPrompt = """
+                Prochain repas : %s (il est %02d:%02d).
+                Stats 7 derniers jours : %d repas, %.0f kcal total.
+                Moyennes macros par repas : proteines %.0f g, glucides %.0f g, lipides %.0f g.
+                Plats deja manges recemment (evite de redonder) : %s.
+                Suggere 1 plat equilibre adapte a cette heure et a ces stats, en evitant de reproposer un plat deja vu.
+                """.formatted(
+                typeFr, now.getHour(), now.getMinute(),
+                meals.size(), totalKcal,
+                avgProt, avgCarbs, avgFat,
+                recentDishes.isEmpty() ? "aucun" : String.join(", ", recentDishes)
+        );
+
+        try {
+            String raw = ollamaService.chatText(SUGGESTION_SYSTEM_PROMPT, userPrompt, true);
+            JsonNode node = objectMapper.readTree(raw);
+            String dish = node.has("dishName") ? node.get("dishName").asText("Suggestion indisponible") : "Suggestion indisponible";
+            String reason = node.has("reason") ? node.get("reason").asText("") : "";
+            Integer kcal = node.has("estimatedCalories") && node.get("estimatedCalories").canConvertToInt()
+                    ? node.get("estimatedCalories").asInt() : null;
+            return new DinnerSuggestionDto(dish, reason, kcal, nextType.name());
+        } catch (Exception ex) {
+            log.warn("Meal suggestion LLM call failed: {}", ex.getMessage());
+            // Fallback simple mais honnete
+            String fallback = switch (nextType) {
+                case BREAKFAST -> "Porridge avoine-fruits rouges";
+                case LUNCH -> "Poke bowl saumon-avocat";
+                case SNACK -> "Fromage blanc-noix";
+                case DINNER -> "Curry de lentilles-legumes";
+            };
+            return new DinnerSuggestionDto(
+                    fallback,
+                    "Ollama indisponible, suggestion par defaut equilibree pour ce creneau.",
+                    null,
+                    nextType.name()
+            );
+        }
     }
 }
