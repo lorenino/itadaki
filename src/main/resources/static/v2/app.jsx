@@ -298,7 +298,6 @@ function AuthScreenWired({ T, onAuth, mobile }) {
     }
   };
 
-  const handleKey = (e) => { if (e.key === 'Enter') go(); };
 
   const formW = mobile ? '100%' : 420;
   return (
