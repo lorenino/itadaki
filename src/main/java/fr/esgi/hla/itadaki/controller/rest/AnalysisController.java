@@ -60,14 +60,9 @@ public class AnalysisController {
     }
 
     /**
-     * Endpoint streaming : relay les tokens Ollama en temps reel via NDJSON.
-     * Le client recoit des lignes JSON separees par \n :
-     *   {"type":"token","content":"..."}
-     *   {"type":"complete","analysis":{...}}
-     *   {"type":"error","message":"..."}
-     *
-     * Utilise un Thread dedie pour ne pas bloquer le pool Tomcat et permettre
-     * a l'emitter de flush chaque chunk au fur et a mesure.
+     * Reçoit les tokens Ollama en temps réel, ligne par ligne (NDJSON).
+     * Chaque ligne : {"type":"token","content":"..."}, {"type":"complete",...} ou {"type":"error",...}
+     * Utilise un Thread séparé pour envoyer sans bloquer le serveur.
      */
     @PostMapping(value = "/stream/{mealId}", produces = MediaType.APPLICATION_NDJSON_VALUE)
     @SecurityRequirement(name = "bearerAuth")
