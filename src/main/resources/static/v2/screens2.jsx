@@ -130,6 +130,7 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
         <>
           <label
             htmlFor="upload-dropzone-input"
+            aria-label="Déposer ou parcourir une photo"
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}

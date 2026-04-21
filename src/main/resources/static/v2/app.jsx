@@ -348,34 +348,34 @@ function AuthScreenWired({ T, onAuth, mobile }) {
                 style={{ flex: 1, padding: '10px 16px', border: 'none', background: mode === t.id ? T.surface : 'transparent', borderRadius: 999, fontFamily: 'Inter,system-ui', fontSize: 13, fontWeight: 600, color: mode === t.id ? T.ink : T.inkMuted, cursor: 'pointer', boxShadow: mode === t.id ? '0 1px 3px rgba(0,0,0,.06)' : 'none' }}>{t.l}</button>
             ))}
           </div>
-          <Field T={T} label="Email" value={em} onChange={setEm} type="email" placeholder="vous@exemple.fr" error={err.em}
-            icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4" /><path d="M2.5 5l5.5 4 5.5-4" stroke="currentColor" strokeWidth="1.4" /></svg>}
-          />
-          {mode === 'signup' && (
-            <Field T={T} label="Nom d'utilisateur" value={un} onChange={setUn} placeholder="kenji_42" error={err.un}
-              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" /><path d="M3 14c.7-2.5 2.8-3.5 5-3.5s4.3 1 5 3.5" stroke="currentColor" strokeWidth="1.4" /></svg>}
+          <form onSubmit={e => { e.preventDefault(); go(); }} style={{ display: 'contents' }}>
+            <Field T={T} label="Email" value={em} onChange={setEm} type="email" placeholder="vous@exemple.fr" error={err.em}
+              icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4" /><path d="M2.5 5l5.5 4 5.5-4" stroke="currentColor" strokeWidth="1.4" /></svg>}
             />
-          )}
-          <fieldset style={{border:'none',padding:0,margin:0}} aria-label="Mot de passe" onKeyDown={handleKey}>
+            {mode === 'signup' && (
+              <Field T={T} label="Nom d'utilisateur" value={un} onChange={setUn} placeholder="kenji_42" error={err.un}
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" /><path d="M3 14c.7-2.5 2.8-3.5 5-3.5s4.3 1 5 3.5" stroke="currentColor" strokeWidth="1.4" /></svg>}
+              />
+            )}
             <Field T={T} label="Mot de passe" value={pw} onChange={setPw} type="password" placeholder="••••••••" error={err.pw} hint={mode === 'signup' ? '6 caractères minimum' : undefined}
               icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4" /><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.4" /></svg>}
             />
-          </fieldset>
-          {apiErr && (
-            <div style={{ padding: '10px 14px', background: 'oklch(0.95 0.03 25)', border: '1px solid ' + T.danger, borderRadius: 12, fontFamily: 'Inter,system-ui', fontSize: 13, color: T.danger, marginBottom: 14 }}>
-              {apiErr}
-            </div>
-          )}
-          {(() => {
-            const submitLabel = mode === 'signup' ? 'Créer mon compte' : 'Se connecter';
-            return (
-              <div style={{ marginTop: 8 }}>
-                <Btn T={T} block onClick={go} disabled={ld} size="lg">
-                  {ld ? <><Spin size={14} /> Un instant…</> : submitLabel}
-                </Btn>
+            {apiErr && (
+              <div style={{ padding: '10px 14px', background: 'oklch(0.95 0.03 25)', border: '1px solid ' + T.danger, borderRadius: 12, fontFamily: 'Inter,system-ui', fontSize: 13, color: T.danger, marginBottom: 14 }}>
+                {apiErr}
               </div>
-            );
-          })()}
+            )}
+            {(() => {
+              const submitLabel = mode === 'signup' ? 'Créer mon compte' : 'Se connecter';
+              return (
+                <div style={{ marginTop: 8 }}>
+                  <Btn T={T} block onClick={go} disabled={ld} size="lg">
+                    {ld ? <><Spin size={14} /> Un instant…</> : submitLabel}
+                  </Btn>
+                </div>
+              );
+            })()}
+          </form>
           <div style={{ textAlign: 'center', fontSize: 11, color: T.inkFaint, marginTop: 18, fontFamily: 'Inter,system-ui', lineHeight: 1.5 }}>
             En continuant vous acceptez nos <span style={{ textDecoration: 'underline', color: T.inkMuted }}>conditions</span>. Les estimations ne sont pas des valeurs médicales.
           </div>
@@ -751,6 +751,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
         <>
           <label
             htmlFor="upload-main-input"
+            aria-label="Déposer ou parcourir une photo"
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
@@ -1483,13 +1484,13 @@ function CoachFab({ T, mobile }) {
             animation: 'fadeIn .25s ease',
           }}>
           <style>{'@keyframes fadeIn {from{opacity:0}to{opacity:1}} @keyframes slideUp {from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}'}</style>
-          <div
-            role="dialog"
-            aria-modal="true"
+          <dialog
+            open
             aria-label="Coach IA"
             onClick={e => e.stopPropagation()}
             onKeyDown={e => e.stopPropagation()}
             style={{
+              border: 'none', padding: 0, margin: 0, outline: 'none',
               width: mobile ? '100%' : 520, maxHeight: mobile ? '88vh' : '80vh',
               background: T.bg, color: T.ink,
               borderRadius: mobile ? '22px 22px 0 0' : 24,
@@ -1603,7 +1604,7 @@ function CoachFab({ T, mobile }) {
                 </div>
               )}
             </div>
-          </div>
+          </dialog>
         </button>
       )}
     </>
