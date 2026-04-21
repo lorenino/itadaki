@@ -15,10 +15,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -61,9 +67,19 @@ public class DataSeeder {
         new CompteDemo("luca@itadaki.demo",  "luca",  8)
     );
 
+    // Chemin avec slashs forward pour que le front resolve bien l'URL (Path.toString()
+    // utilise \ sur Windows, ce qui casse la requete /uploads/demo/placeholder.jpg cote navigateur).
+    private static final String DEMO_PHOTO_PATH = "./uploads/demo/placeholder.jpg";
+    private static final Path DEMO_PHOTO = Path.of(DEMO_PHOTO_PATH);
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void seed() {
+        // Assure que le placeholder demo existe sur disque (copie depuis le classpath
+        // vers ./uploads/demo/placeholder.jpg si absent). Evite les 404 d'images
+        // en demo et permet de re-analyser un meal seede via le flux Ollama.
+        ensureDemoPhotoOnDisk();
+
         // Check idempotent par email : seed uniquement si les comptes demo sont absents.
         if (userRepository.existsByEmail("kenji@itadaki.demo")) {
             log.info("DataSeeder : comptes demo deja presents, seed ignore.");
@@ -116,14 +132,16 @@ public class DataSeeder {
         // Override @CreationTimestamp via direct query to set the historical date.
         mealRepository.updateUploadedAt(meal.getId(), uploadedAt);
 
+        // Toutes les photos demo pointent vers le meme placeholder reel.
+        // OriginalFileName garde le nom du plat pour le contexte humain / admin panel.
         String nomFichier = plat.nom().replace(" ", "-") + ".jpg";
         MealPhoto photo = new MealPhoto();
         photo.setMeal(meal);
         photo.setOriginalFileName(nomFichier);
-        photo.setFileName(nomFichier);
-        photo.setStoragePath("./uploads/demo/" + nomFichier);
+        photo.setFileName("placeholder.jpg");
+        photo.setStoragePath(DEMO_PHOTO_PATH);
         photo.setContentType("image/jpeg");
-        photo.setSize(500_000L);
+        photo.setSize(184_392L);
         mealPhotoRepository.save(photo);
 
         int kcalMin = (int) (plat.kcal() * 0.85);
@@ -145,5 +163,23 @@ public class DataSeeder {
         analysis.setDetectedItemsJson(rawJson);
         analysis.setAnalyzedAt(uploadedAt);
         mealAnalysisRepository.save(analysis);
+    }
+
+    private void ensureDemoPhotoOnDisk() {
+        if (Files.exists(DEMO_PHOTO)) return;
+        try {
+            Files.createDirectories(DEMO_PHOTO.getParent());
+            ClassPathResource resource = new ClassPathResource("demo/placeholder.jpg");
+            if (!resource.exists()) {
+                log.warn("DataSeeder : classpath:/demo/placeholder.jpg introuvable, photos demo afficheront le Dish SVG de fallback.");
+                return;
+            }
+            try (InputStream in = resource.getInputStream()) {
+                Files.copy(in, DEMO_PHOTO, StandardCopyOption.REPLACE_EXISTING);
+            }
+            log.info("DataSeeder : placeholder demo copie vers {}", DEMO_PHOTO);
+        } catch (IOException ex) {
+            log.warn("DataSeeder : impossible d'ecrire le placeholder demo ({})", ex.getMessage());
+        }
     }
 }
