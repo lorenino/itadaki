@@ -44,11 +44,7 @@ public class WebConfig implements WebMvcConfigurer {
         resolvers.add(new CurrentUserArgumentResolver(userRepository));
     }
 
-    /**
-     * Expose les images uploadees sous /uploads/** (servies depuis app.upload.dir).
-     * Permet au front d'afficher les vraies photos dans l'historique et la vue repas
-     * via <img src="/uploads/xxx.jpg"> sans passer par un endpoint REST dedie.
-     */
+    /** Serves uploaded images under /uploads/** from the configured app.upload.dir. */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String location = uploadDir.endsWith("/") ? uploadDir : uploadDir + "/";
@@ -83,10 +79,7 @@ public class WebConfig implements WebMvcConfigurer {
                 return null;
             }
 
-            // Extract user email from the principal name (in our case, email is the username)
             String userEmail = authentication.getName();
-
-            // Look up the user ID from the database
             return userRepository.findByEmail(userEmail)
                     .map(user -> user.getId())
                     .orElse(null);

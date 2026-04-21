@@ -361,7 +361,6 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   const [file, setFile] = useState(null);
   const [drag, setDrag] = useState(false);
   const [prog, setProg] = useState(0);
-  const [loadVar] = useState(() => Math.floor(Math.random() * 3));
   const [apiErr, setApiErr] = useState('');
   const fileRef = useRef();
 
@@ -684,16 +683,14 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
     setLd(true);
     setApiErr('');
     try {
-      // Fire-and-forget + polling. Le back UPSERT conserve le meme id et parfois
-      // le meme analyzedAt (@CreationTimestamp Hibernate ne se remplace pas a
-      // l'update). On compare donc le CONTENU : detectedDishName + items + kcal
-      // changent quand le LLM integre le hint.
+      // Fire-and-forget + polling : compare le contenu (nom + items + kcal) pour detecter
+      // la mise a jour, car analyzedAt n'est pas fiable sur un UPSERT Hibernate.
       const snapshot = (r) => JSON.stringify([
         r?.detectedDishName || '',
         (r?.detectedItems || []).map(i => i.name || '').join('|'),
         r?.estimatedTotalCalories || 0,
       ]);
-      const oldSnap = snapshot(meal.analysisRaw);
+      const oldSnap = snapshot((reanalyzed || meal).analysisRaw);
       let postErr = null;
       const postPromise = API.analyses.reanalyze(mealId, hint.trim())
         .catch(e => { postErr = e; return null; });
@@ -773,6 +770,28 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   };
 
   const displayMeal = reanalyzed || meal;
+  const mealPhoto = (displayMeal.img && displayMeal.img !== 'PLACEHOLDER') ? displayMeal.img : displayMeal.photoUrl;
+  const hs = healthScore(displayMeal);
+  const detectedItems = displayMeal.analysisRaw?.detectedItems
+    ?? displayMeal.ing.map(name => ({ name, calories: null, protein: null, carbs: null, fat: null }));
+
+  const renderIngredientChip = (item, idx) => {
+    const name = item.name || item;
+    const hasMacros = item.calories != null || item.protein != null;
+    const macroStr = hasMacros
+      ? `${Math.round(item.calories || 0)} kcal · ${Math.round(item.protein || 0)}P / ${Math.round(item.carbs || 0)}G / ${Math.round(item.fat || 0)}L`
+      : null;
+    return (
+      <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+        <Chip T={T} variant="default">{name}</Chip>
+        {macroStr && (
+          <span style={{ fontFamily: 'Inter,system-ui', fontSize: 10.5, color: T.inkMuted, paddingLeft: 2 }}>
+            {macroStr}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -786,12 +805,10 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '240px 1fr', gap: 20, alignItems: 'start' }}>
         <div>
-          {(() => {
-            const photo = (displayMeal.img && displayMeal.img !== 'PLACEHOLDER') ? displayMeal.img : displayMeal.photoUrl;
-            return photo
-              ? <img src={photo} alt="repas analysé" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 24, boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} />
-              : <Dish seed={displayMeal.seed} style={{ width: '100%', aspectRatio: '1/1', boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} rounded={24} />;
-          })()}
+          {mealPhoto
+            ? <img src={mealPhoto} alt="repas analysé" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 24, boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} />
+            : <Dish seed={displayMeal.seed} style={{ width: '100%', aspectRatio: '1/1', boxShadow: '0 10px 30px -10px rgba(80,40,10,.3)' }} rounded={24} />
+          }
           <div style={{ marginTop: 14, padding: 14, background: T.accentSoft, borderRadius: 16 }}>
             <Confidence value={displayMeal.conf} T={T} />
             <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.accentDeep, marginTop: 10, lineHeight: 1.5 }}>
@@ -805,44 +822,18 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
             <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 26 : 30, color: T.ink, letterSpacing: '-.02em', lineHeight: 1.1, fontWeight: 500, flex: 1, minWidth: 0 }}>
               {displayMeal.name}
             </div>
-            {(() => {
-              const hs = healthScore(displayMeal);
-              return (
-                <div title={'Score santé : ' + hs.grade} style={{
-                  width: 60, height: 60, borderRadius: '50%', flexShrink: 0,
-                  background: hs.color, color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: '"Fraunces",serif', fontSize: 30, fontWeight: 700, fontStyle: 'italic',
-                  boxShadow: '0 4px 14px rgba(0,0,0,.18)',
-                }}>
-                  {hs.grade}
-                </div>
-              );
-            })()}
+            <div title={'Score santé : ' + hs.grade} style={{
+              width: 60, height: 60, borderRadius: '50%', flexShrink: 0,
+              background: hs.color, color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: '"Fraunces",serif', fontSize: 30, fontWeight: 700, fontStyle: 'italic',
+              boxShadow: '0 4px 14px rgba(0,0,0,.18)',
+            }}>
+              {hs.grade}
+            </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-            {(() => {
-              const items = displayMeal.analysisRaw && displayMeal.analysisRaw.detectedItems
-                ? displayMeal.analysisRaw.detectedItems
-                : displayMeal.ing.map(name => ({ name, calories: null, protein: null, carbs: null, fat: null }));
-              return items.map((item, idx) => {
-                const name = item.name || item;
-                const hasMacros = item.calories != null || item.protein != null;
-                const macroStr = hasMacros
-                  ? `${Math.round(item.calories || 0)} kcal · ${Math.round(item.protein || 0)}P / ${Math.round(item.carbs || 0)}G / ${Math.round(item.fat || 0)}L`
-                  : null;
-                return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                    <Chip T={T} variant="default">{name}</Chip>
-                    {macroStr && (
-                      <span style={{ fontFamily: 'Inter,system-ui', fontSize: 10.5, color: T.inkMuted, paddingLeft: 2 }}>
-                        {macroStr}
-                      </span>
-                    )}
-                  </div>
-                );
-              });
-            })()}
+            {detectedItems.map(renderIngredientChip)}
           </div>
 
           {/* Classement du repas — petit-dej / dej / snack / diner */}

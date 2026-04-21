@@ -16,24 +16,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Implements OllamaService using a plain {@link RestClient} (not Spring AI ChatClient)
- * so the code is decoupled from Spring AI 2.0.0-M4 milestone API changes.
- *
- * Flow for {@link #analyzeImage(String, String)}:
- * <ol>
- *   <li>Read the image bytes from disk and base64-encode them.</li>
- *   <li>Build the Ollama {@code /api/chat} payload with system + user messages,
- *       {@code stream=false}, {@code format=json}, {@code temperature=0.2}.</li>
- *   <li>POST the payload, retrieve {@code message.content} from the response
- *       (which is already a JSON string thanks to {@code format=json}).</li>
- *   <li>Return the raw JSON string — parsing into the domain model happens in
- *       {@code AnalysisServiceImpl}.</li>
- * </ol>
- *
- * All failures are wrapped into a {@link MealAnalysisException} so the
- * {@code GlobalExceptionHandler} can map them to a clean HTTP response.
- */
+/** Calls Ollama /api/chat with a base64-encoded image; wraps all failures in MealAnalysisException. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -79,26 +62,8 @@ public class OllamaServiceImpl implements OllamaService {
     @Override
     public String analyzeImage(String imagePath, String prompt) {
         try {
-            byte[] bytes = Files.readAllBytes(Path.of(imagePath));
-            String base64 = Base64.getEncoder().encodeToString(bytes);
-
-            Map<String, Object> body = Map.of(
-                    "model", model,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", SYSTEM_PROMPT),
-                            Map.of(
-                                    "role", "user",
-                                    "content", prompt == null || prompt.isBlank() ? DEFAULT_USER_PROMPT : prompt,
-                                    "images", List.of(base64)
-                            )
-                    ),
-                    "stream", false,
-                    "format", "json",
-                    "options", Map.of(
-                            "temperature", 0.2,
-                            "num_ctx", 4096
-                    )
-            );
+            String base64Image = encodeImageToBase64(imagePath);
+            Map<String, Object> body = buildRequestBody(prompt, base64Image);
 
             log.debug("Calling Ollama /api/chat with model={} for image={}", model, imagePath);
             OllamaChatResponse response = ollamaRestClient.post()
@@ -108,14 +73,7 @@ public class OllamaServiceImpl implements OllamaService {
                     .retrieve()
                     .body(OllamaChatResponse.class);
 
-            if (response == null || response.message() == null || response.message().content() == null) {
-                throw new MealAnalysisException("Ollama returned empty or malformed response");
-            }
-
-            String content = response.message().content();
-            log.debug("Ollama response content: {}", content);
-            return content;
-
+            return extractContent(response, imagePath);
         } catch (MealAnalysisException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -130,21 +88,48 @@ public class OllamaServiceImpl implements OllamaService {
             return DEFAULT_USER_PROMPT;
         }
         return """
-                L'utilisateur indique que l'analyse précédente est incorrecte avec l'indication suivante :
-                <user_correction>
+                L'utilisateur signale que l'analyse précédente est incorrecte :
+                <correction>
                 %s
-                </user_correction>
-
-                Re-analyse the photo taking this correction into account. \
-                Return ONLY valid JSON matching the schema. No prose.
+                </correction>
+                Réanalyse la photo en tenant compte de cette correction. \
+                Retourne UNIQUEMENT du JSON valide correspondant au schéma. Aucun texte.
                 """.formatted(hint);
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record OllamaChatResponse(OllamaMessage message) {
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private String encodeImageToBase64(String imagePath) throws Exception {
+        byte[] bytes = Files.readAllBytes(Path.of(imagePath));
+        return Base64.getEncoder().encodeToString(bytes);
+    }
+
+    private Map<String, Object> buildRequestBody(String prompt, String base64Image) {
+        String userPrompt = (prompt == null || prompt.isBlank()) ? DEFAULT_USER_PROMPT : prompt;
+        return Map.of(
+                "model", model,
+                "messages", List.of(
+                        Map.of("role", "system", "content", SYSTEM_PROMPT),
+                        Map.of("role", "user", "content", userPrompt, "images", List.of(base64Image))
+                ),
+                "stream", false,
+                "format", "json",
+                "options", Map.of("temperature", 0.2, "num_ctx", 4096)
+        );
+    }
+
+    private String extractContent(OllamaChatResponse response, String imagePath) {
+        if (response == null || response.message() == null || response.message().content() == null) {
+            throw new MealAnalysisException("Ollama returned empty or malformed response");
+        }
+        String content = response.message().content();
+        log.debug("Ollama response content: {}", content);
+        return content;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record OllamaMessage(String role, String content) {
-    }
+    private record OllamaChatResponse(OllamaMessage message) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record OllamaMessage(String role, String content) {}
 }

@@ -10,10 +10,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * JWT token generation and validation using Base64-encoded claims.
- * Signature is a static HMAC placeholder — sufficient for demo/POC purposes.
- */
+/** JWT generation and validation using Base64-encoded claims (static HMAC signature, demo-grade). */
 @Service
 @RequiredArgsConstructor
 public class JwtServiceImpl implements JwtService {
@@ -35,8 +32,8 @@ public class JwtServiceImpl implements JwtService {
         claims.put("iat", System.currentTimeMillis());
         claims.put("exp", System.currentTimeMillis() + expirationMs);
 
-        String payload = Base64.getEncoder().encodeToString(claims.toString().getBytes());
-        String header = Base64.getEncoder().encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes());
+        String payload   = Base64.getEncoder().encodeToString(claims.toString().getBytes());
+        String header    = Base64.getEncoder().encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes());
         String signature = Base64.getEncoder().encodeToString(secretKey.getBytes());
 
         return header + "." + payload + "." + signature;
@@ -45,78 +42,60 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String extractUsername(String token) {
         try {
-            if (token == null || !token.contains(".")) {
-                return null;
-            }
-            String[] parts = token.split("\\.");
-            if (parts.length < 2) {
-                return null;
-            }
-            String payload = new String(Base64.getDecoder().decode(parts[1]));
-            if (payload.contains("\"username\"") || payload.contains("username")) {
-                int start = payload.indexOf("username");
-                if (start != -1) {
-                    int valueStart = payload.indexOf("=", start) + 1;
-                    int valueEnd = payload.indexOf(",", valueStart);
-                    if (valueEnd == -1) {
-                        valueEnd = payload.indexOf("}", valueStart);
-                    }
-                    if (valueStart > 0 && valueEnd > valueStart) {
-                        return payload.substring(valueStart, valueEnd).trim();
-                    }
-                }
-            }
+            return extractField(decodePayload(token), "username");
         } catch (Exception ex) {
-            // Return null on parse error
+            return null;
         }
-        return null;
     }
 
     @Override
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
-            if (token == null || !token.contains(".")) {
-                return false;
-            }
-            String[] parts = token.split("\\.");
-            if (parts.length != 3) {
-                return false;
-            }
+            if (token == null || token.split("\\.").length != 3) return false;
 
-            String payload = new String(Base64.getDecoder().decode(parts[1]));
+            String payload = decodePayload(token);
+            if (payload == null) return false;
+            if (isTokenExpired(payload)) return false;
 
-            // Check expiration
-            if (payload.contains("\"exp\"") || payload.contains("exp")) {
-                int expStart = payload.indexOf("exp");
-                if (expStart != -1) {
-                    int valueStart = payload.indexOf("=", expStart) + 1;
-                    int valueEnd = payload.indexOf(",", valueStart);
-                    if (valueEnd == -1) {
-                        valueEnd = payload.indexOf("}", valueStart);
-                    }
-                    if (valueStart > 0 && valueEnd > valueStart) {
-                        try {
-                            long expiration = Long.parseLong(
-                                    payload.substring(valueStart, valueEnd).trim()
-                            );
-                            if (System.currentTimeMillis() > expiration) {
-                                return false;
-                            }
-                        } catch (NumberFormatException ex) {
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            String username = extractUsername(token);
-            if (username == null || !username.equals(userDetails.getUsername())) {
-                return false;
-            }
-
-            return true;
+            String username = extractField(payload, "username");
+            return username != null && username.equals(userDetails.getUsername());
         } catch (Exception ex) {
             return false;
+        }
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private String decodePayload(String token) {
+        if (token == null || !token.contains(".")) return null;
+        String[] parts = token.split("\\.");
+        if (parts.length < 2) return null;
+        try {
+            return new String(Base64.getDecoder().decode(parts[1]));
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /** Extracts a named field from the decoded payload string using indexOf-based parsing. */
+    private String extractField(String payload, String field) {
+        if (payload == null) return null;
+        int start = payload.indexOf(field);
+        if (start == -1) return null;
+        int valueStart = payload.indexOf("=", start) + 1;
+        int valueEnd   = payload.indexOf(",", valueStart);
+        if (valueEnd == -1) valueEnd = payload.indexOf("}", valueStart);
+        if (valueStart <= 0 || valueEnd <= valueStart) return null;
+        return payload.substring(valueStart, valueEnd).trim();
+    }
+
+    private boolean isTokenExpired(String payload) {
+        String expStr = extractField(payload, "exp");
+        if (expStr == null) return false;
+        try {
+            return System.currentTimeMillis() > Long.parseLong(expStr);
+        } catch (NumberFormatException ex) {
+            return true;
         }
     }
 }

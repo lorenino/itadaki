@@ -20,13 +20,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Implementation of AnalysisService.
- * Orchestrates meal image analysis via Ollama with JSON response parsing.
- */
+/** Orchestrates meal image analysis via Ollama with JSON response parsing. */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -41,91 +39,45 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     @Override
     public MealAnalysisResponseDto analyzeMeal(Long mealId) {
-        // Fetch meal and verify it exists
-        Meal meal = mealRepository.findById(mealId)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
-
-        // Update status to ANALYSING
-        meal.setStatus(MealStatus.ANALYSING);
-        mealRepository.save(meal);
-
+        Meal meal = findMeal(mealId);
+        updateMealStatus(meal, MealStatus.ANALYSING);
         try {
-            // Get stored path from MealPhotoService
-            String imagePath = mealPhotoService.getStoredPath(mealId);
+            String rawResponse = callOllama(mealId, null);
+            JsonNode json = objectMapper.readTree(rawResponse);
 
-            // Build prompt and call Ollama
-            String prompt = ollamaService.buildMealAnalysisPrompt(null);
-            String rawResponse = ollamaService.analyzeImage(imagePath, prompt);
-
-            // Parse JSON response
-            JsonNode jsonNode = objectMapper.readTree(rawResponse);
-
-            // Create MealAnalysis entity
             MealAnalysis analysis = new MealAnalysis();
             analysis.setMeal(meal);
-            analysis.setDetectedDishName(extractString(jsonNode, "nomPlat"));
-            analysis.setDetectedItemsJson(rawResponse);
-            analysis.setEstimatedTotalCalories(extractCalories(jsonNode));
-            analysis.setConfidenceScore(parseConfidence(extractString(jsonNode, "confiance")));
-            analysis.setRawModelResponse(rawResponse);
-
+            populateAnalysis(analysis, json, rawResponse);
             analysis = mealAnalysisRepository.save(analysis);
 
-            // Update meal status to ANALYSED
-            meal.setStatus(MealStatus.ANALYSED);
-            mealRepository.save(meal);
-
+            updateMealStatus(meal, MealStatus.ANALYSED);
             return toResponseDto(analysis, rawResponse);
         } catch (Exception ex) {
-            meal.setStatus(MealStatus.FAILED);
-            mealRepository.save(meal);
+            updateMealStatus(meal, MealStatus.FAILED);
             throw new MealAnalysisException("Analysis failed: " + ex.getMessage(), ex);
         }
     }
 
     @Override
     public MealAnalysisResponseDto reanalyzeMeal(Long mealId, ReanalyzeRequestDto request) {
-        // UPSERT pattern : on reutilise l'analyse existante plutot que delete+insert.
-        // Le delete+insert cassait la relation OneToOne Meal<->MealAnalysis
-        // (TransientPropertyValueException quand meal.analysis reference l'entite supprimee).
-        Meal meal = mealRepository.findById(mealId)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
-
-        meal.setStatus(MealStatus.ANALYSING);
-        mealRepository.save(meal);
-
+        // UPSERT pattern: reuse existing analysis to avoid TransientPropertyValueException
+        // when meal.analysis references a deleted entity.
+        Meal meal = findMeal(mealId);
+        updateMealStatus(meal, MealStatus.ANALYSING);
         try {
-            String imagePath = mealPhotoService.getStoredPath(mealId);
-            String prompt = ollamaService.buildMealAnalysisPrompt(request.hint());
-            String rawResponse = ollamaService.analyzeImage(imagePath, prompt);
+            String rawResponse = callOllama(mealId, request.hint());
+            JsonNode json = objectMapper.readTree(rawResponse);
 
-            JsonNode jsonNode = objectMapper.readTree(rawResponse);
-
-            // Trouve l'analyse existante ou en cree une nouvelle
-            MealAnalysis analysis = mealAnalysisRepository.findByMealId(mealId)
-                    .orElseGet(() -> {
-                        MealAnalysis a = new MealAnalysis();
-                        a.setMeal(meal);
-                        return a;
-                    });
-            analysis.setDetectedDishName(extractString(jsonNode, "nomPlat"));
-            analysis.setDetectedItemsJson(rawResponse);
-            analysis.setEstimatedTotalCalories(extractCalories(jsonNode));
-            analysis.setConfidenceScore(parseConfidence(extractString(jsonNode, "confiance")));
-            analysis.setRawModelResponse(rawResponse);
-            // Force analyzedAt = now pour que le polling front detecte la mise a jour
-            // (CreationTimestamp ne change pas sur un update)
-            analysis.setAnalyzedAt(java.time.LocalDateTime.now());
-
+            MealAnalysis analysis = findOrCreateAnalysis(mealId, meal);
+            populateAnalysis(analysis, json, rawResponse);
+            // Force analyzedAt so polling detects the update (@CreationTimestamp won't change on update).
+            analysis.setAnalyzedAt(LocalDateTime.now());
             analysis = mealAnalysisRepository.save(analysis);
 
-            meal.setStatus(MealStatus.ANALYSED);
-            mealRepository.save(meal);
-
+            updateMealStatus(meal, MealStatus.ANALYSED);
             return toResponseDto(analysis, rawResponse);
         } catch (Exception ex) {
-            meal.setStatus(MealStatus.FAILED);
-            mealRepository.save(meal);
+            updateMealStatus(meal, MealStatus.FAILED);
             throw new MealAnalysisException("Re-analysis failed: " + ex.getMessage(), ex);
         }
     }
@@ -137,30 +89,53 @@ public class AnalysisServiceImpl implements AnalysisService {
         return toResponseDto(analysis, analysis.getDetectedItemsJson());
     }
 
-    /**
-     * Hydrate une MealAnalysisResponseDto via le mapper MapStruct puis injecte
-     * detectedItems parse depuis le JSON brut (MapStruct ignore ce champ).
-     */
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private Meal findMeal(Long mealId) {
+        return mealRepository.findById(mealId)
+                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+    }
+
+    private void updateMealStatus(Meal meal, MealStatus status) {
+        meal.setStatus(status);
+        mealRepository.save(meal);
+    }
+
+    private String callOllama(Long mealId, String hint) {
+        String imagePath = mealPhotoService.getStoredPath(mealId);
+        String prompt = ollamaService.buildMealAnalysisPrompt(hint);
+        return ollamaService.analyzeImage(imagePath, prompt);
+    }
+
+    private MealAnalysis findOrCreateAnalysis(Long mealId, Meal meal) {
+        return mealAnalysisRepository.findByMealId(mealId).orElseGet(() -> {
+            MealAnalysis a = new MealAnalysis();
+            a.setMeal(meal);
+            return a;
+        });
+    }
+
+    private void populateAnalysis(MealAnalysis analysis, JsonNode json, String rawResponse) {
+        analysis.setDetectedDishName(extractString(json, "nomPlat"));
+        analysis.setDetectedItemsJson(rawResponse);
+        analysis.setEstimatedTotalCalories(extractCalories(json));
+        analysis.setConfidenceScore(parseConfidence(extractString(json, "confiance")));
+        analysis.setRawModelResponse(rawResponse);
+    }
+
+    /** Builds response DTO via MapStruct then injects detectedItems parsed from raw JSON. */
     private MealAnalysisResponseDto toResponseDto(MealAnalysis analysis, String itemsJson) {
         MealAnalysisResponseDto dto = mealAnalysisMapper.toDto(analysis);
-        List<DetectedFoodItemDto> detectedItems = parseDetectedItems(itemsJson);
         return new MealAnalysisResponseDto(
-                dto.id(),
-                dto.mealId(),
-                dto.detectedDishName(),
-                detectedItems,
-                dto.estimatedTotalCalories(),
-                dto.confidenceScore(),
-                dto.rawModelResponse(),
-                dto.analyzedAt()
+                dto.id(), dto.mealId(), dto.detectedDishName(),
+                parseDetectedItems(itemsJson),
+                dto.estimatedTotalCalories(), dto.confidenceScore(),
+                dto.rawModelResponse(), dto.analyzedAt()
         );
     }
 
     private String extractString(JsonNode node, String field) {
-        if (node.has(field) && !node.get(field).isNull()) {
-            return node.get(field).asText();
-        }
-        return null;
+        return node.has(field) && !node.get(field).isNull() ? node.get(field).asText() : null;
     }
 
     private Double extractCalories(JsonNode node) {
@@ -169,20 +144,18 @@ public class AnalysisServiceImpl implements AnalysisService {
                 return node.get("caloriesMax").asDouble();
             }
         } catch (Exception ex) {
-            // Ignore parsing errors
+            // fall through
         }
         return null;
     }
 
     private Double parseConfidence(String confidence) {
-        if (confidence == null) {
-            return 0.5;
-        }
+        if (confidence == null) return 0.5;
         return switch (confidence.toLowerCase()) {
-            case "haute" -> 0.9;
+            case "haute"   -> 0.9;
             case "moyenne" -> 0.5;
-            case "basse" -> 0.2;
-            default -> 0.5;
+            case "basse"   -> 0.2;
+            default        -> 0.5;
         };
     }
 
@@ -193,44 +166,35 @@ public class AnalysisServiceImpl implements AnalysisService {
             if (node.has("ingredients") && node.get("ingredients").isArray()) {
                 for (JsonNode ingredient : node.get("ingredients")) {
                     if (ingredient.isTextual()) {
-                        // Rétro-compatibilité : ancien format string[]
-                        DetectedFoodItemDto item = new DetectedFoodItemDto(
-                                ingredient.asText(),
-                                1.0,
-                                "portion",
-                                null,
-                                null,
-                                null,
-                                null
-                        );
-                        items.add(item);
+                        items.add(ingredientFromString(ingredient.asText()));
                     } else if (ingredient.isObject()) {
-                        // Nouveau format : {nom, caloriesApprox, proteines, glucides, lipides}
-                        String nom = ingredient.has("nom") ? ingredient.get("nom").asText() : "inconnu";
-                        Double calories = ingredient.has("caloriesApprox") && !ingredient.get("caloriesApprox").isNull()
-                                ? ingredient.get("caloriesApprox").asDouble() : null;
-                        Double proteines = ingredient.has("proteines") && !ingredient.get("proteines").isNull()
-                                ? ingredient.get("proteines").asDouble() : null;
-                        Double glucides = ingredient.has("glucides") && !ingredient.get("glucides").isNull()
-                                ? ingredient.get("glucides").asDouble() : null;
-                        Double lipides = ingredient.has("lipides") && !ingredient.get("lipides").isNull()
-                                ? ingredient.get("lipides").asDouble() : null;
-                        DetectedFoodItemDto item = new DetectedFoodItemDto(
-                                nom,
-                                1.0,
-                                "portion",
-                                calories,
-                                proteines,
-                                glucides,
-                                lipides
-                        );
-                        items.add(item);
+                        items.add(ingredientFromObject(ingredient));
                     }
                 }
             }
         } catch (Exception ex) {
-            // Si le parsing échoue, retourne la liste vide
+            // Return empty list on parse failure
         }
         return items;
+    }
+
+    private DetectedFoodItemDto ingredientFromString(String name) {
+        return new DetectedFoodItemDto(name, 1.0, "portion", null, null, null, null);
+    }
+
+    private DetectedFoodItemDto ingredientFromObject(JsonNode n) {
+        return new DetectedFoodItemDto(
+                n.has("nom") ? n.get("nom").asText() : "inconnu",
+                1.0,
+                "portion",
+                safeDouble(n, "caloriesApprox"),
+                safeDouble(n, "proteines"),
+                safeDouble(n, "glucides"),
+                safeDouble(n, "lipides")
+        );
+    }
+
+    private Double safeDouble(JsonNode node, String field) {
+        return node.has(field) && !node.get(field).isNull() ? node.get(field).asDouble() : null;
     }
 }

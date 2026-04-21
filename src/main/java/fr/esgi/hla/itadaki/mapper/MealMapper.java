@@ -14,13 +14,7 @@ import org.mapstruct.ReportingPolicy;
 
 import java.util.List;
 
-/**
- * MapStruct mapper between Meal entity and meal-related DTOs.
- * Uses MealPhotoMapper for nested photo mapping.
- *
- * TODO: Step 3 — MealHistoryItemDto.photoUrl should use FileStorageService.getFileUrl(storagePath).
- *       For now storagePath is passed through as photoUrl.
- */
+/** MapStruct mapper between Meal entity and meal-related DTOs. Uses MealPhotoMapper for photo mapping. */
 @Mapper(
         unmappedTargetPolicy = ReportingPolicy.IGNORE,
         componentModel = MappingConstants.ComponentModel.SPRING,

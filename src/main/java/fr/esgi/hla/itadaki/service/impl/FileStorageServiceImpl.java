@@ -29,18 +29,11 @@ public class FileStorageServiceImpl implements FileStorageService {
     @Override
     public String store(MultipartFile file) {
         try {
-            // Generate unique filename
             String filename = UUID.randomUUID().toString() + getFileExtension(file.getOriginalFilename());
             Path uploadPath = Paths.get(uploadDir);
-
-            // Create upload directory if it doesn't exist
             Files.createDirectories(uploadPath);
-
-            // Save file
             Path filePath = uploadPath.resolve(filename);
             Files.copy(file.getInputStream(), filePath);
-
-            // Return relative path
             return uploadDir + "/" + filename;
         } catch (IOException ex) {
             throw new RuntimeException("Failed to store file: " + ex.getMessage(), ex);
@@ -59,9 +52,7 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     @Override
     public String getFileUrl(String filePath) {
-        // Construit une URL relative (servie par ResourceHandler /uploads/**).
-        // filePath peut etre "./uploads/uuid.jpg" ou "uploads/uuid.jpg" -- on
-        // extrait juste le nom de fichier pour eviter le "./".
+        // Strips leading path segments so "./uploads/uuid.jpg" → "/uploads/uuid.jpg".
         if (filePath == null) return null;
         int slash = filePath.lastIndexOf('/');
         String name = slash >= 0 ? filePath.substring(slash + 1) : filePath;

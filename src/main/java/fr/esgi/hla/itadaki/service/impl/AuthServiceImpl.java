@@ -9,16 +9,14 @@ import fr.esgi.hla.itadaki.exception.ConflictException;
 import fr.esgi.hla.itadaki.exception.UnauthorizedException;
 import fr.esgi.hla.itadaki.mapper.UserMapper;
 import fr.esgi.hla.itadaki.repository.UserRepository;
+import fr.esgi.hla.itadaki.security.SecurityConstants;
 import fr.esgi.hla.itadaki.service.AuthService;
 import fr.esgi.hla.itadaki.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-/**
- * Implementation of AuthService.
- * Handles user registration and login with JWT token generation.
- */
+/** Handles user registration and login, returning JWT tokens. */
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -30,7 +28,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponseDto register(RegisterRequestDto request) {
-        // Check if email or username already exists
         if (userRepository.existsByEmail(request.email())) {
             throw new ConflictException("Email already in use: " + request.email());
         }
@@ -38,7 +35,6 @@ public class AuthServiceImpl implements AuthService {
             throw new ConflictException("Username already taken: " + request.username());
         }
 
-        // Create new user
         User user = new User();
         user.setUsername(request.username());
         user.setEmail(request.email());
@@ -49,12 +45,7 @@ public class AuthServiceImpl implements AuthService {
 
         String token = generateTokenForUser(user);
 
-        return new AuthResponseDto(
-                token,
-                "Bearer",
-                86_400_000L,
-                userMapper.toDto(user)
-        );
+        return new AuthResponseDto(token, "Bearer", SecurityConstants.JWT_EXPIRATION_MS, userMapper.toDto(user));
     }
 
     @Override
@@ -68,12 +59,7 @@ public class AuthServiceImpl implements AuthService {
 
         String token = generateTokenForUser(user);
 
-        return new AuthResponseDto(
-                token,
-                "Bearer",
-                86_400_000L, // 24 hours in milliseconds
-                userMapper.toDto(user)
-        );
+        return new AuthResponseDto(token, "Bearer", SecurityConstants.JWT_EXPIRATION_MS, userMapper.toDto(user));
     }
 
     private String generateTokenForUser(User user) {
