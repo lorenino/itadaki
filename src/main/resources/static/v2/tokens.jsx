@@ -73,7 +73,7 @@ function last7(meals){
   for(let i=6;i>=0;i--){
     const d=new Date(today); d.setDate(d.getDate()-i);
     const ds=d.toISOString().slice(0,10);
-    const dayMeals=meals.filter(m=>m.date&&m.date.slice(0,10)===ds);
+    const dayMeals=meals.filter(m=>m.date?.slice(0,10)===ds);
     const mid=dayMeals.reduce((s,m)=>s+(m.kMin+m.kMax)/2,0);
     out.push({date:d,label:labels[d.getDay()],dayNum:d.getDate(),calories:Math.round(mid),isToday:i===0});
   }

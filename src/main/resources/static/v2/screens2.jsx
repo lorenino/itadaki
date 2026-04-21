@@ -128,15 +128,12 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
 
       {stage === 'idle' && (
         <>
-          <div
-            role="button"
-            tabIndex={0}
+          <label
+            htmlFor="upload-dropzone-input"
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
-            onClick={() => fileRef.current.click()}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current.click(); } }}
-            style={{ border: `2px dashed ${drag ? T.accent : T.hairline}`, borderRadius: 24, padding: mobile ? '34px 18px' : '52px 28px', textAlign: 'center', background: drag ? T.accentSoft : T.bgAlt, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}
+            style={{ display: 'block', border: `2px dashed ${drag ? T.accent : T.hairline}`, borderRadius: 24, padding: mobile ? '34px 18px' : '52px 28px', textAlign: 'center', background: drag ? T.accentSoft : T.bgAlt, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}
           >
             <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: .4, pointerEvents: 'none' }}>
               <path d="M0,130 Q150,80 300,120 Q450,160 600,100 L600,200 L0,200 Z" fill={T.matchaSoft} />
@@ -152,8 +149,8 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
               <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 20 : 22, color: T.ink, letterSpacing: '-.02em', fontWeight: 500 }}>Glissez une photo ici</div>
               <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginTop: 6 }}>ou cliquez pour parcourir · JPG, PNG, HEIC · 20 Mo max</div>
             </div>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => pick(e.target.files[0])} />
-          </div>
+            <input id="upload-dropzone-input" ref={fileRef} type="file" accept="image/*" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }} onChange={e => pick(e.target.files[0])} />
+          </label>
           <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
             <Btn T={T} variant="soft" onClick={() => fileRef.current.click()} icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" /><circle cx="8" cy="9" r="2.8" stroke="currentColor" strokeWidth="1.5" /></svg>}>Prendre une photo</Btn>
             <Btn T={T} variant="ghost" onClick={usePlaceholder} icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" /><path d="M8 5v3l2 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>}>Utiliser un exemple</Btn>

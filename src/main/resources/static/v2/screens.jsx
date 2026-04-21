@@ -22,7 +22,7 @@ function healthScore(m){
 
 function validateAuthForm(mode, em, un, pw) {
   const e = {};
-  if (!em || !em.includes('@')) { e.em = 'Email invalide'; }
+  if (!em?.includes('@')) { e.em = 'Email invalide'; }
   if (mode === 'signup' && (!un || un.length < 3)) { e.un = 'Au moins 3 caractères'; }
   if (!pw || pw.length < 6) { e.pw = '6 caractères minimum'; }
   return e;
@@ -141,7 +141,7 @@ function DashboardHeader({T, mobile, todayLabel, user}) {
 }
 
 function StreakBanner({T, mobile, streak}) {
-  if (!streak || streak.current < 2) { return null; }
+  if ((streak?.current ?? 0) < 2) { return null; }
   return (
     <div style={{background:`linear-gradient(135deg,#f97316,#ef4444)`,borderRadius:18,padding:mobile?'12px 16px':'14px 20px',marginBottom:mobile?12:16,display:'flex',alignItems:'center',gap:14,boxShadow:'0 4px 16px rgba(239,68,68,.22)'}}>
       <span style={{fontSize:28,lineHeight:1,flexShrink:0}}>🔥</span>
@@ -188,25 +188,37 @@ function CalorieRing({T, mobile, today, target, R, CIRC, dashNormal, dashOver, o
   );
 }
 
+function barBgColor(isToday, isOver, T) {
+  if (isToday) { return T.accent; }
+  if (isOver) { return T.danger; }
+  return T.ink;
+}
+
+function barOpacityValue(isToday, isOver) {
+  if (isToday) { return 1; }
+  if (isOver) { return 0.75; }
+  return 0.8;
+}
+
 function BarChartDay({d, i, hv, setHv, target, maxBar, mobile, T}) {
-  const h = d.calories > 0 ? (d.calories / (maxBar * 1.2)) * (mobile ? 90 : 110) : 4;
+  const chartHeight = mobile ? 90 : 110;
+  const h = d.calories > 0 ? (d.calories / (maxBar * 1.2)) * chartHeight : 4;
   const isOver = d.calories > target;
-  const barBg = d.isToday ? T.accent : (isOver ? T.danger : T.ink);
-  const barOpacity = d.isToday ? 1 : (isOver ? 0.75 : 0.8);
-  const handleKey = (e) => { if (e.key === 'Enter' || e.key === ' ') { setHv(hv === i ? null : i); } };
+  const barBg = barBgColor(d.isToday, isOver, T);
+  const barOpacity = barOpacityValue(d.isToday, isOver);
+  const handleClick = () => setHv(hv === i ? null : i);
   return (
-    <div
+    <button
       key={d.label}
-      role="button"
-      tabIndex={0}
-      style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',cursor:'pointer',position:'relative'}}
+      type="button"
+      style={{all:'unset',flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end',height:'100%',cursor:'pointer',position:'relative',boxSizing:'border-box'}}
       onMouseEnter={()=>setHv(i)}
       onMouseLeave={()=>setHv(null)}
-      onKeyDown={handleKey}
+      onClick={handleClick}
     >
       {hv===i&&<div style={{position:'absolute',top:-8,transform:'translateY(-100%)',background:T.ink,color:T.bg,padding:'3px 8px',borderRadius:6,fontFamily:'JetBrains Mono,monospace',fontSize:10,whiteSpace:'nowrap'}}>{d.calories} kcal</div>}
       <div style={{width:'100%',maxWidth:22,height:h,background:barBg,opacity:barOpacity,borderRadius:'6px 6px 3px 3px',transition:'height .5s ease'}}/>
-    </div>
+    </button>
   );
 }
 
@@ -233,7 +245,7 @@ function WeekGraph({T, mobile, days, target, maxBar, hv, setHv}) {
 }
 
 function MacroPanel({T, mobile, overview}) {
-  if (!overview || overview.avgProtein == null) { return null; }
+  if (overview?.avgProtein == null) { return null; }
   if (!(overview.avgProtein > 0 || overview.avgCarbs > 0 || overview.avgFat > 0)) { return null; }
   return (
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:mobile?8:12,marginBottom:mobile?16:20}}>
@@ -266,7 +278,7 @@ function Dashboard({T,user,meals,onUpload,onHistory,onMeal,mobile,days_override,
   const qualC=calcQualColor(today.calories,T);
   const maxBar=Math.max(...days.map(d=>d.calories),1800);
   const todayStr=new Date().toISOString().slice(0,10);
-  const todayMeals=meals.filter(m=>m.date&&m.date.slice(0,10)===todayStr);
+  const todayMeals=meals.filter(m=>m.date?.slice(0,10)===todayStr);
   const todayLabel=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
   const [hv,setHv]=useState(null);
 
