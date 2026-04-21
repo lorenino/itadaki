@@ -1165,7 +1165,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
           {statCard('Utilisateurs', stats.totalUsers)}
           {statCard('Repas', stats.totalMeals)}
           {statCard('Analyses IA', stats.totalAnalyses)}
-          {statCard('Kcal moy. / repas', stats.avgCaloriesPerMeal != null ? Math.round(stats.avgCaloriesPerMeal) : '—', 'kcal')}
+          {statCard('Kcal moy. / analyse', stats.avgCaloriesPerMeal != null ? Math.round(stats.avgCaloriesPerMeal) : '—', 'kcal')}
         </div>
       )}
 
