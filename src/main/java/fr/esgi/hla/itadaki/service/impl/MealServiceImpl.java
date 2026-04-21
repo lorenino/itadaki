@@ -17,14 +17,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-/**
- * Implementation of MealService.
- * Handles meal creation, retrieval, and deletion with ownership validation.
- */
+/** Handles meal creation, retrieval, and deletion with ownership validation. */
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class MealServiceImpl implements MealService {
+
+    private static final String MEAL_NOT_FOUND = MEAL_NOT_FOUND;
 
     private final MealRepository mealRepository;
     private final UserRepository userRepository;
@@ -33,34 +32,29 @@ public class MealServiceImpl implements MealService {
 
     @Override
     public MealUploadResponseDto uploadMeal(MultipartFile image, Long userId) {
-        // Verify user exists
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        // Create meal entity with PENDING status
         Meal meal = new Meal();
         meal.setUser(user);
         meal.setStatus(MealStatus.PENDING);
         meal = mealRepository.save(meal);
 
-        // Store photo via MealPhotoService
         mealPhotoService.storePhoto(image, meal.getId());
-
-        // Return upload response
         return mealMapper.toUploadResponseDto(meal);
     }
 
     @Override
     public MealResponseDto findById(Long id) {
         Meal meal = mealRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + id));
         return mealMapper.toDto(meal);
     }
 
     @Override
     public MealResponseDto updateMealType(Long id, MealType mealType, Long requestingUserId) {
         Meal meal = mealRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + id));
         if (!meal.getUser().getId().equals(requestingUserId)) {
             throw new ForbiddenException("You do not have permission to update this meal");
         }
@@ -72,17 +66,13 @@ public class MealServiceImpl implements MealService {
     @Override
     public void deleteMeal(Long id, Long requestingUserId) {
         Meal meal = mealRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + id));
 
-        // Check ownership
         if (!meal.getUser().getId().equals(requestingUserId)) {
             throw new ForbiddenException("You do not have permission to delete this meal");
         }
 
-        // Delete photo via MealPhotoService
         mealPhotoService.deleteByMealId(id);
-
-        // Delete meal
         mealRepository.delete(meal);
     }
 }

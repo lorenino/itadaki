@@ -12,10 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * REST controller for user profile endpoints.
- * Handles user data retrieval.
- */
+/** REST controller exposing /api/users profile retrieval endpoints (ADMIN only). */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/users")

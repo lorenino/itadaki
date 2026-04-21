@@ -5,11 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.Serializable;
 import java.util.List;
 
-/**
- * DTO for returning a meal correction record.
- * TODO: Step 3 — populated via MealCorrectionMapper.toDto(MealCorrection).
- *       correctedItems parsed from MealCorrection.correctedItemsJson via ObjectMapper in CorrectionServiceImpl.
- */
+/** DTO for returning a meal correction record. */
 public record MealCorrectionResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,

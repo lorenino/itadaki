@@ -2,11 +2,7 @@ package fr.esgi.hla.itadaki.dto.meal;
 
 import java.io.Serializable;
 
-/**
- * DTO representing a single food item detected by the AI during meal analysis.
- * Used as a nested element inside MealAnalysisResponseDto.
- * TODO: Populated by OllamaService response parsing in AnalysisServiceImpl.
- */
+/** DTO representing a single food item detected by the AI during meal analysis. */
 public record DetectedFoodItemDto(
         String name,
         Double quantity,

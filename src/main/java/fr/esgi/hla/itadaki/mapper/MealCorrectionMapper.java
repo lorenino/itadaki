@@ -14,16 +14,7 @@ import org.mapstruct.ReportingPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * MapStruct mapper between MealCorrection entity and correction-related DTOs.
- *
- * correctedItems is intentionally ignored here — MealCorrection stores a JSON string
- * (correctedItemsJson) that requires ObjectMapper parsing. The service enriches
- * the DTO after mapping by constructing a new record:
- *   new MealCorrectionResponseDto(..., parsedItems, ...)
- *
- * TODO: Step 3 — CorrectionServiceImpl enriches correctedItems from correctedItemsJson via ObjectMapper.
- */
+/** MapStruct mapper for MealCorrection — correctedItems left null (service enriches from JSON). */
 @Mapper(unmappedTargetPolicy = ReportingPolicy.IGNORE, componentModel = MappingConstants.ComponentModel.SPRING)
 public interface MealCorrectionMapper {
 

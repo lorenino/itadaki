@@ -6,10 +6,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Custom annotation to inject the currently authenticated user ID into controller method parameters.
- * Used with a HandlerMethodArgumentResolver to resolve the user ID from the SecurityContext.
- */
+/** Injects the authenticated user ID into controller parameters via HandlerMethodArgumentResolver. */
 @Documented
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)

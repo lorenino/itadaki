@@ -4,12 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
 
-/**
- * DTO for returning meal photo metadata in API responses.
- * No binary data — storagePath-derived photoUrl only.
- * TODO: Step 3 — populated via MealPhotoMapper.toDto(MealPhoto).
- *       photoUrl built from storagePath via FileStorageService.getFileUrl().
- */
+/** DTO for returning meal photo metadata — no binary data, storagePath-derived photoUrl only. */
 public record MealPhotoResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         String photoUrl,

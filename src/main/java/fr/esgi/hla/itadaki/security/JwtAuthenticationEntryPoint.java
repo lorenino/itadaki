@@ -11,10 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
-/**
- * Called when an unauthenticated request hits a protected endpoint.
- * Responds with HTTP 401 Unauthorized and a JSON ErrorResponse body.
- */
+/** Returns HTTP 401 with a JSON ErrorResponse body when an unauthenticated request hits a protected endpoint. */
 @Component
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
@@ -25,14 +22,12 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
-        // Build error response
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpServletResponse.SC_UNAUTHORIZED,
                 authException.getMessage() != null ? authException.getMessage() : "Unauthorized",
                 request.getRequestURI()
         );
 
-        // Write JSON response
         ObjectMapper mapper = new ObjectMapper();
         response.getWriter().write(mapper.writeValueAsString(errorResponse));
     }

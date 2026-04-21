@@ -1,10 +1,6 @@
 package fr.esgi.hla.itadaki.exception;
 
-/**
- * TODO: Thrown when the AI analysis of a meal fails.
- *       Reasons: Ollama service unavailable, model error, unparseable AI response.
- *       GlobalExceptionHandler maps this to HTTP 500.
- */
+/** Thrown when AI meal analysis fails (Ollama unavailable, model error, unparseable response); mapped to HTTP 500. */
 public class MealAnalysisException extends RuntimeException {
 
     public MealAnalysisException(String message) {

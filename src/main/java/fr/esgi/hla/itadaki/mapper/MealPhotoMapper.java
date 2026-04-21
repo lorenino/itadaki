@@ -14,18 +14,7 @@ import org.mapstruct.ReportingPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * MapStruct mapper between MealPhoto entity and photo-related DTOs.
- *
- * Field alignment (entity → DTO):
- *   storagePath    → photoUrl  (raw path; URL building with base URL is done in Step 3 via FileStorageService)
- *   originalFileName → originalFileName  (identical names — no @Mapping needed)
- *   contentType    → contentType  (identical names)
- *   size           → size       (identical names)
- *   uploadedAt     → uploadedAt (LocalDateTime → String via @Named)
- *
- * TODO: Step 3 — replace storagePath-passthrough with FileStorageService.getFileUrl(storagePath).
- */
+/** MapStruct mapper between MealPhoto entity and photo-related DTOs (storagePath → photoUrl). */
 @Mapper(unmappedTargetPolicy = ReportingPolicy.IGNORE, componentModel = MappingConstants.ComponentModel.SPRING)
 public interface MealPhotoMapper {
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import fr.esgi.hla.itadaki.annotation.CurrentUser;
+import fr.esgi.hla.itadaki.business.User;
 import fr.esgi.hla.itadaki.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,7 +82,7 @@ public class WebConfig implements WebMvcConfigurer {
 
             String userEmail = authentication.getName();
             return userRepository.findByEmail(userEmail)
-                    .map(user -> user.getId())
+                    .map(User::getId)
                     .orElse(null);
         }
     }

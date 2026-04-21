@@ -19,12 +19,7 @@ import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
-/**
- * JPA entity representing the uploaded image file metadata for a meal.
- * Stores path and descriptive metadata only — NO binary data, NO blob, NO byte[].
- *
- * Owning side of the Meal↔MealPhoto 1:1 relationship: holds the FK column meal_id.
- */
+/** Stores file metadata (path, MIME type, size) for a meal image — no binary data; owning side of Meal↔MealPhoto (FK: meal_id). */
 @Entity
 @Table(name = "meal_photos")
 @Data

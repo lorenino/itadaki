@@ -14,11 +14,7 @@ import org.mapstruct.ReportingPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * MapStruct mapper between User entity and user-related DTOs.
- * role (UserRole enum) → role (String): handled automatically by MapStruct (enum.name()).
- * createdAt (LocalDateTime) → createdAt (String): formatted via @Named("formatDateTime").
- */
+/** MapStruct mapper between User entity and user-related DTOs. */
 @Mapper(unmappedTargetPolicy = ReportingPolicy.IGNORE, componentModel = MappingConstants.ComponentModel.SPRING)
 public interface UserMapper {
 

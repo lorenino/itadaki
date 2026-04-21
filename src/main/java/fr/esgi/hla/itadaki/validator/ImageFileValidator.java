@@ -27,7 +27,7 @@ public class ImageFileValidator implements ConstraintValidator<ValidImageFile, M
     }
 
     @Override
-    public void initialize(ValidImageFile constraintAnnotation) {}
+    public void initialize(ValidImageFile constraintAnnotation) { /* no initialization needed */ }
 
     @Override
     public boolean isValid(MultipartFile file, ConstraintValidatorContext context) {
@@ -64,7 +64,7 @@ public class ImageFileValidator implements ConstraintValidator<ValidImageFile, M
             byte[] head = in.readNBytes(12);
             if (head.length < 3) return false;
             return isJpeg(head) || isPng(head) || isWebP(head);
-        } catch (IOException ex) {
+        } catch (IOException _) {
             return false;
         }
     }

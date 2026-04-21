@@ -24,10 +24,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-/**
- * REST controller for meal management endpoints.
- * Handles meal upload, retrieval, and deletion.
- */
+/** REST controller exposing /api/meals upload, retrieval, and deletion endpoints. */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/meals")

@@ -17,12 +17,7 @@ import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
-/**
- * JPA entity storing user-submitted corrections applied to a meal analysis.
- * Optional (0..1) — only created when the user disagrees with the AI analysis.
- *
- * Owning side of the Meal↔MealCorrection 0..1 relationship: holds the FK column meal_id.
- */
+/** Stores user corrections to a meal analysis (optional 0..1); owning side of Meal↔MealCorrection (FK: meal_id). */
 @Entity
 @Table(name = "meal_corrections")
 @Data

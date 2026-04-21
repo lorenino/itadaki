@@ -8,10 +8,7 @@ import fr.esgi.hla.itadaki.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-/**
- * Implementation of UserService.
- * Handles user profile retrieval by ID or email.
- */
+/** Retrieves user profiles by ID or email; throws ResourceNotFoundException when not found. */
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {

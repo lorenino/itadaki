@@ -7,11 +7,7 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Service interface for meal history retrieval operations.
- * - getHistory(Long userId, Pageable pageable)         → Page<MealHistoryItemDto>
- * - getHistoryByDate(Long userId, LocalDate date)      → List<MealHistoryItemDto>
- */
+/** Retrieves paginated and date-filtered meal history for a user. */
 public interface HistoryService {
 
     Page<MealHistoryItemDto> getHistory(Long userId, Pageable pageable);

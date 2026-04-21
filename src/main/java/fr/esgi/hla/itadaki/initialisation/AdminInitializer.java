@@ -10,10 +10,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-/**
- * Initializes the default admin user on first startup if no admin exists.
- * Credentials externalises dans application.properties (admin.email / admin.password).
- */
+/** Creates the default admin account on first startup if none exists; credentials come from application.properties. */
 @Component
 @RequiredArgsConstructor
 public class AdminInitializer implements ApplicationRunner {

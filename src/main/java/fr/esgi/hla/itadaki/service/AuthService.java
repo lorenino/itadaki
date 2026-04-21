@@ -4,11 +4,7 @@ import fr.esgi.hla.itadaki.dto.auth.AuthResponseDto;
 import fr.esgi.hla.itadaki.dto.auth.LoginRequestDto;
 import fr.esgi.hla.itadaki.dto.auth.RegisterRequestDto;
 
-/**
- * Service interface for authentication operations.
- * - register(RegisterRequestDto) → AuthResponseDto (create user, return JWT)
- * - login(LoginRequestDto)       → AuthResponseDto (authenticate, return JWT)
- */
+/** Handles user registration and login, returning JWT tokens. */
 public interface AuthService {
 
     AuthResponseDto register(RegisterRequestDto request);

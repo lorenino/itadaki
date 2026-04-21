@@ -17,10 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * REST controller for meal correction endpoints.
- * Handles manual analysis corrections submitted by users.
- */
+/** REST controller exposing /api/corrections endpoints for manual analysis corrections. */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/corrections")

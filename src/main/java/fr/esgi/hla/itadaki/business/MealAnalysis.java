@@ -17,12 +17,7 @@ import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
-/**
- * JPA entity storing the AI analysis result for a meal.
- * Created by OllamaService after successfully processing the meal image.
- *
- * Owning side of the Meal↔MealAnalysis 1:1 relationship: holds the FK column meal_id.
- */
+/** Stores the AI analysis result for a meal; owning side of the Meal↔MealAnalysis 1:1 (FK: meal_id). */
 @Entity
 @Table(name = "meal_analyses")
 @Data

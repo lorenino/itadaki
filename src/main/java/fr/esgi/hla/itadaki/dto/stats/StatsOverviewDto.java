@@ -2,10 +2,7 @@ package fr.esgi.hla.itadaki.dto.stats;
 
 import java.io.Serializable;
 
-/**
- * DTO for the overall nutritional statistics overview of a user.
- * TODO: Built from aggregation queries in StatsServiceImpl.
- */
+/** DTO for the overall nutritional statistics overview of a user. */
 public record StatsOverviewDto(
         int totalMeals,
         Double totalCalories,

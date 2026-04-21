@@ -149,4 +149,4 @@ function MobNav({T,active,onNav,user}){
   </div>;
 }
 
-Object.assign(window,{Dish,Btn,Field,Chip,Confidence,Blob,Wave,Spin,Shell,SideNav,MobNav});
+Object.assign(globalThis,{Dish,Btn,Field,Chip,Confidence,Blob,Wave,Spin,Shell,SideNav,MobNav});

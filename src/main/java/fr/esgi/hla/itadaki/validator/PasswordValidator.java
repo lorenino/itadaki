@@ -6,10 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
-/**
- * Validates password strength rules for user registration and authentication.
- * Can be used programmatically or as a backing class for custom validation.
- */
+/** Validates password strength rules for user registration and authentication. */
 @Component
 public class PasswordValidator {
 
@@ -19,17 +16,10 @@ public class PasswordValidator {
     private static final Pattern DIGIT = Pattern.compile("\\d");
     private static final Pattern SPECIAL_CHAR = Pattern.compile("[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>?/]");
 
-    /**
-     * Validates password meets all strength requirements.
-     */
     public boolean validate(String password) {
-        return password != null && !getViolations(password).isEmpty() == false;
+        return password != null && getViolations(password).isEmpty();
     }
 
-    /**
-     * Returns list of violations for a given password.
-     * Empty list means password is valid.
-     */
     public List<String> getViolations(String password) {
         List<String> violations = new ArrayList<>();
 

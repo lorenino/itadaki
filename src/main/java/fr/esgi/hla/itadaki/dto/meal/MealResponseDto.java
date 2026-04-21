@@ -4,10 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
 
-/**
- * DTO for returning a full meal record, including its associated photo.
- * TODO: Step 3 — populated via MealMapper.toDto(Meal).
- */
+/** DTO for returning a full meal record, including its associated photo. */
 public record MealResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         String status,

@@ -8,12 +8,11 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * SpringDoc OpenAPI configuration.
- * Configures Swagger UI with JWT Bearer authentication scheme.
- */
+/** Configures Swagger UI with JWT Bearer authentication scheme. */
 @Configuration
 public class OpenApiConfig {
+
+    private static final String BEARER_AUTH = "bearerAuth";
 
     @Bean
     public OpenAPI customOpenAPI() {
@@ -22,11 +21,11 @@ public class OpenApiConfig {
                         .title("Itadaki API")
                         .version("1.0")
                         .description("AI-powered meal analysis REST API"))
-                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
+                .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH))
                 .components(new Components()
-                        .addSecuritySchemes("bearerAuth",
+                        .addSecuritySchemes(BEARER_AUTH,
                                 new SecurityScheme()
-                                        .name("bearerAuth")
+                                        .name(BEARER_AUTH)
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT")));

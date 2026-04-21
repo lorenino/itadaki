@@ -555,7 +555,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
               const active = i === phase;
               const done = i < phase;
               return (
-                <div key={i} style={{
+                <div key={p.title} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 12,
                   padding: '10px 14px', borderRadius: 14,
                   background: active ? T.bgAlt : 'transparent',
@@ -585,7 +585,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
                     {active && i === 1 && visibleIngredients > 0 &&
                       <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {fakeIngredients.slice(0, visibleIngredients).map((ing, idx) =>
-                          <span key={idx} style={{
+                          <span key={`${ing}-${idx}`} style={{
                             fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
                             background: p.color + '20', color: p.color, fontWeight: 500,
                             animation: 'fadein .35s ease',
@@ -817,7 +817,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
     if (!mealId) { setCorrMsg('ID du repas manquant'); return; }
     const view = reanalyzed || meal;
     // Reutilise les items du back si dispo, sinon reconstruit depuis les noms
-    const items = view.analysisRaw && view.analysisRaw.detectedItems && view.analysisRaw.detectedItems.length
+    const items = view.analysisRaw?.detectedItems?.length
       ? view.analysisRaw.detectedItems.map(i => ({
           name: i.name || String(i),
           quantity: i.quantity ?? 1,
@@ -859,7 +859,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
       ? `${Math.round(item.calories || 0)} kcal · ${Math.round(item.protein || 0)}P / ${Math.round(item.carbs || 0)}G / ${Math.round(item.fat || 0)}L`
       : null;
     return (
-      <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+      <div key={`${name}-${idx}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
         <Chip T={T} variant="default">{name}</Chip>
         {macroStr && (
           <span style={{ fontFamily: 'Inter,system-ui', fontSize: 10.5, color: T.inkMuted, paddingLeft: 2 }}>
@@ -1032,7 +1032,7 @@ function HistoryWired({ T, onMeal, mobile }) {
   const handleDelete = async (m) => {
     const mid = getMealId(m);
     if (!mid) return;
-    if (!window.confirm('Supprimer ce repas ?')) return;
+    if (!globalThis.confirm('Supprimer ce repas ?')) return;
     try {
       await API.meals.del(mid);
       setMeals(prev => prev.filter(x => getMealId(x) !== mid));
@@ -1049,7 +1049,7 @@ function HistoryWired({ T, onMeal, mobile }) {
     const k = (m.date || '').slice(0, 10);
     (groups[k] = groups[k] || []).push(m);
   });
-  const days = Object.keys(groups).sort().reverse();
+  const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const yesterStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
@@ -1180,7 +1180,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
 
   const deleteUser = async (u) => {
     if (currentUser && currentUser.id === u.id) { alert('Vous ne pouvez pas supprimer votre propre compte.'); return; }
-    if (!window.confirm(`Supprimer ${u.username} et tous ses repas ?`)) return;
+    if (!globalThis.confirm(`Supprimer ${u.username} et tous ses repas ?`)) return;
     try {
       await API.admin.deleteUser(u.id);
       await Promise.all([reloadUsers(), reloadMeals(), reloadStats()]);
@@ -1189,7 +1189,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
 
   const toggleRole = async (u) => {
     const next = u.role === 'ADMIN' ? 'USER' : 'ADMIN';
-    if (!window.confirm(`Changer le role de ${u.username} en ${next} ?`)) return;
+    if (!globalThis.confirm(`Changer le role de ${u.username} en ${next} ?`)) return;
     try {
       await API.admin.setRole(u.id, next);
       await reloadUsers();
@@ -1197,7 +1197,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
   };
 
   const deleteMeal = async (m) => {
-    if (!window.confirm(`Supprimer le repas #${m.id} de ${m.userName} ?`)) return;
+    if (!globalThis.confirm(`Supprimer le repas #${m.id} de ${m.userName} ?`)) return;
     try {
       await API.admin.deleteMeal(m.id);
       await Promise.all([reloadMeals(), reloadStats()]);
@@ -1579,11 +1579,11 @@ function App() {
   };
 
   // Responsive : détecte mobile
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(() => globalThis.innerWidth < 768);
   useEffect(() => {
-    const h = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
+    const h = () => setIsMobile(globalThis.innerWidth < 768);
+    globalThis.addEventListener('resize', h);
+    return () => globalThis.removeEventListener('resize', h);
   }, []);
 
   // Si non connecté, forcer auth

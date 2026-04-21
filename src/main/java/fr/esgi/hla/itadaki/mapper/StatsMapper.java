@@ -1,7 +1,5 @@
 package fr.esgi.hla.itadaki.mapper;
 
-import fr.esgi.hla.itadaki.dto.stats.DailyCaloriesDto;
-import fr.esgi.hla.itadaki.dto.stats.StatsOverviewDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.MappingConstants;
 import org.mapstruct.ReportingPolicy;

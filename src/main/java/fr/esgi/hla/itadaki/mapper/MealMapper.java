@@ -57,5 +57,4 @@ public interface MealMapper {
     List<MealResponseDto> toDto(List<Meal> meals);
 
     List<MealHistoryItemDto> toHistoryItemDto(List<Meal> meals);
-    // formatDateTime inherited from MealPhotoMapper via uses = {MealPhotoMapper.class}
 }

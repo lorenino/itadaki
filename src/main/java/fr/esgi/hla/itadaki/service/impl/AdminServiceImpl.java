@@ -19,11 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Implementation de AdminService.
- * Transactional(readOnly=true) par defaut pour permettre les LAZY loads
- * (meals.size() sur User, analysis et user sur Meal).
- */
+/** Admin service; readOnly by default to allow LAZY loads (meals.size, analysis, user on Meal). */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -43,11 +39,9 @@ public class AdminServiceImpl implements AdminService {
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
-        // Protege contre le lockout : on ne supprime pas le dernier ADMIN.
         if (user.getRole() == UserRole.ADMIN && userRepository.countByRole(UserRole.ADMIN) <= 1) {
             throw new ConflictException("Cannot delete the last admin user");
         }
-        // Cascade REMOVE sur User.meals : repas, photos, analyses et corrections partent avec.
         userRepository.deleteById(id);
     }
 
@@ -56,7 +50,6 @@ public class AdminServiceImpl implements AdminService {
     public AdminUserResponseDto updateUserRole(Long id, UserRole role) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
-        // Meme garde-fou sur la retrogradation du dernier ADMIN.
         if (user.getRole() == UserRole.ADMIN && role != UserRole.ADMIN
                 && userRepository.countByRole(UserRole.ADMIN) <= 1) {
             throw new ConflictException("Cannot demote the last admin user");

@@ -15,6 +15,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class JwtServiceImpl implements JwtService {
 
+    private static final String FIELD_USERNAME = "username";
+
     @Value("${app.jwt.secret}")
     private String secretKey;
 
@@ -28,7 +30,7 @@ public class JwtServiceImpl implements JwtService {
                 .map(auth -> auth.getAuthority())
                 .findFirst()
                 .orElse("ROLE_USER"));
-        claims.put("username", userDetails.getUsername());
+        claims.put(FIELD_USERNAME, userDetails.getUsername());
         claims.put("iat", System.currentTimeMillis());
         claims.put("exp", System.currentTimeMillis() + expirationMs);
 
@@ -42,8 +44,8 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String extractUsername(String token) {
         try {
-            return extractField(decodePayload(token), "username");
-        } catch (Exception ex) {
+            return extractField(decodePayload(token), FIELD_USERNAME);
+        } catch (Exception _) {
             return null;
         }
     }
@@ -57,9 +59,9 @@ public class JwtServiceImpl implements JwtService {
             if (payload == null) return false;
             if (isTokenExpired(payload)) return false;
 
-            String username = extractField(payload, "username");
+            String username = extractField(payload, FIELD_USERNAME);
             return username != null && username.equals(userDetails.getUsername());
-        } catch (Exception ex) {
+        } catch (Exception _) {
             return false;
         }
     }
@@ -72,7 +74,7 @@ public class JwtServiceImpl implements JwtService {
         if (parts.length < 2) return null;
         try {
             return new String(Base64.getDecoder().decode(parts[1]));
-        } catch (Exception ex) {
+        } catch (Exception _) {
             return null;
         }
     }
@@ -94,7 +96,7 @@ public class JwtServiceImpl implements JwtService {
         if (expStr == null) return false;
         try {
             return System.currentTimeMillis() > Long.parseLong(expStr);
-        } catch (NumberFormatException ex) {
+        } catch (NumberFormatException _) {
             return true;
         }
     }

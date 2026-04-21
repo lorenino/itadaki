@@ -1,5 +1,6 @@
 package fr.esgi.hla.itadaki.service.impl;
 
+import fr.esgi.hla.itadaki.exception.MealAnalysisException;
 import fr.esgi.hla.itadaki.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,10 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
-/**
- * Implementation of FileStorageService using local filesystem storage.
- * Stores files in configured upload directory and provides file URLs.
- */
+/** Stores files in configured upload directory and provides file URLs. */
 @Service
 @RequiredArgsConstructor
 public class FileStorageServiceImpl implements FileStorageService {
@@ -36,7 +34,7 @@ public class FileStorageServiceImpl implements FileStorageService {
             Files.copy(file.getInputStream(), filePath);
             return uploadDir + "/" + filename;
         } catch (IOException ex) {
-            throw new RuntimeException("Failed to store file: " + ex.getMessage(), ex);
+            throw new MealAnalysisException("Failed to store file: " + ex.getMessage(), ex);
         }
     }
 
@@ -46,13 +44,12 @@ public class FileStorageServiceImpl implements FileStorageService {
             Path path = Paths.get(filePath);
             Files.deleteIfExists(path);
         } catch (IOException ex) {
-            throw new RuntimeException("Failed to delete file: " + ex.getMessage(), ex);
+            throw new MealAnalysisException("Failed to delete file: " + ex.getMessage(), ex);
         }
     }
 
     @Override
     public String getFileUrl(String filePath) {
-        // Strips leading path segments so "./uploads/uuid.jpg" → "/uploads/uuid.jpg".
         if (filePath == null) return null;
         int slash = filePath.lastIndexOf('/');
         String name = slash >= 0 ? filePath.substring(slash + 1) : filePath;

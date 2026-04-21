@@ -22,23 +22,24 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-/**
- * Implementation of StatsService.
- * Aggregates nutritional statistics from user meal data.
- */
+/** Aggregates nutritional statistics from user meal data. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
 public class StatsServiceImpl implements StatsService {
+
+    private static final String FIELD_PROTEINES        = "proteines";
+    private static final String FIELD_GLUCIDES         = "glucides";
+    private static final String FIELD_LIPIDES          = "lipides";
+    private static final String FIELD_ESTIMATED_CALS   = "estimatedCalories";
+    private static final String FIELD_INGREDIENTS      = "ingredients";
 
     private final MealAnalysisRepository mealAnalysisRepository;
     private final MealRepository mealRepository;
@@ -47,7 +48,6 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public StatsOverviewDto getOverview(Long userId) {
-        // Get all meals for user
         List<Meal> meals = mealRepository.findAllByUserId(userId, org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE))
                 .getContent();
 
@@ -55,13 +55,12 @@ public class StatsServiceImpl implements StatsService {
             return new StatsOverviewDto(0, 0.0, 0.0, 0.0, 0.0, 0.0, null, null);
         }
 
-        // Calculate totals and averages
         double totalCalories = 0.0;
         double totalProtein = 0.0;
         double totalCarbs = 0.0;
         double totalFat = 0.0;
         int mealCount = meals.size();
-        int mealsWithMacros = 0; // denominateur pour moyenne des macros
+        int mealsWithMacros = 0;
 
         for (Meal meal : meals) {
             MealAnalysis analysis = meal.getAnalysis();
@@ -71,11 +70,8 @@ public class StatsServiceImpl implements StatsService {
                 totalCalories += analysis.getEstimatedTotalCalories();
             }
 
-            // Parse detectedItemsJson pour sommer les macros par ingredient
-            // (format persiste depuis commit dd7da30 :
-            // {"ingredients":[{"nom":"...","caloriesApprox":X,"proteines":Y,"glucides":Z,"lipides":W},...]})
             double[] mealMacros = extractMealMacros(analysis.getDetectedItemsJson());
-            if (mealMacros != null) {
+            if (mealMacros.length > 0) {
                 totalProtein += mealMacros[0];
                 totalCarbs   += mealMacros[1];
                 totalFat     += mealMacros[2];
@@ -83,7 +79,6 @@ public class StatsServiceImpl implements StatsService {
             }
         }
 
-        // Calculate average daily calories (approximation: total / days since first meal)
         LocalDateTime firstMealTime = meals.stream()
                 .map(Meal::getUploadedAt)
                 .min(LocalDateTime::compareTo)
@@ -92,7 +87,6 @@ public class StatsServiceImpl implements StatsService {
         long daysSinceFirst = ChronoUnit.DAYS.between(firstMealTime.toLocalDate(), LocalDate.now()) + 1;
         double avgDailyCalories = totalCalories / Math.max(daysSinceFirst, 1);
 
-        // Moyennes macros PAR REPAS (pas par jour : plus pertinent pour un "profil nutritionnel")
         double avgProtein = mealsWithMacros > 0 ? totalProtein / mealsWithMacros : 0.0;
         double avgCarbs   = mealsWithMacros > 0 ? totalCarbs   / mealsWithMacros : 0.0;
         double avgFat     = mealsWithMacros > 0 ? totalFat     / mealsWithMacros : 0.0;
@@ -109,52 +103,50 @@ public class StatsServiceImpl implements StatsService {
         );
     }
 
-    /**
-     * Parse detectedItemsJson et somme les macros (proteines/glucides/lipides)
-     * de tous les ingredients du repas. Retourne null si aucune macro trouvee
-     * (pour que le denominateur de moyenne ne soit pas fausse par des repas
-     * sans breakdown nutritionnel).
-     */
+    /** Returns [prot, carbs, fat] summed from ingredients JSON, or empty array if unavailable. */
     private double[] extractMealMacros(String detectedItemsJson) {
-        if (detectedItemsJson == null || detectedItemsJson.isBlank()) return null;
+        if (detectedItemsJson == null || detectedItemsJson.isBlank()) return new double[0];
         try {
             JsonNode root = objectMapper.readTree(detectedItemsJson);
-            JsonNode items = root.get("ingredients");
-            if (items == null || !items.isArray()) return null;
-
-            double prot = 0, carbs = 0, fat = 0;
-            boolean found = false;
-            for (JsonNode item : items) {
-                if (!item.isObject()) continue;
-                if (item.has("proteines") && !item.get("proteines").isNull()) {
-                    prot += item.get("proteines").asDouble(0);
-                    found = true;
-                }
-                if (item.has("glucides") && !item.get("glucides").isNull()) {
-                    carbs += item.get("glucides").asDouble(0);
-                    found = true;
-                }
-                if (item.has("lipides") && !item.get("lipides").isNull()) {
-                    fat += item.get("lipides").asDouble(0);
-                    found = true;
-                }
-            }
-            return found ? new double[]{prot, carbs, fat} : null;
+            JsonNode items = root.get(FIELD_INGREDIENTS);
+            if (items == null || !items.isArray()) return new double[0];
+            return sumIngredientMacros(items);
         } catch (Exception ex) {
             log.debug("Could not parse detectedItemsJson for stats macros: {}", ex.getMessage());
-            return null;
+            return new double[0];
         }
+    }
+
+    private double[] sumIngredientMacros(JsonNode items) {
+        double prot = 0;
+        double carbs = 0;
+        double fat = 0;
+        boolean found = false;
+        for (JsonNode item : items) {
+            if (!item.isObject()) continue;
+            if (item.has(FIELD_PROTEINES) && !item.get(FIELD_PROTEINES).isNull()) {
+                prot += item.get(FIELD_PROTEINES).asDouble(0);
+                found = true;
+            }
+            if (item.has(FIELD_GLUCIDES) && !item.get(FIELD_GLUCIDES).isNull()) {
+                carbs += item.get(FIELD_GLUCIDES).asDouble(0);
+                found = true;
+            }
+            if (item.has(FIELD_LIPIDES) && !item.get(FIELD_LIPIDES).isNull()) {
+                fat += item.get(FIELD_LIPIDES).asDouble(0);
+                found = true;
+            }
+        }
+        return found ? new double[]{prot, carbs, fat} : new double[0];
     }
 
     @Override
     public List<DailyCaloriesDto> getDailyCalories(Long userId, LocalDate from, LocalDate to) {
-        // Get meals in date range
         LocalDateTime fromDateTime = from.atStartOfDay();
         LocalDateTime toDateTime = to.plusDays(1).atStartOfDay();
 
         List<Meal> meals = mealRepository.findAllByUserIdAndUploadedAtBetween(userId, fromDateTime, toDateTime);
 
-        // Group by date and sum calories
         Map<LocalDate, Double> dailyTotals = new HashMap<>();
         Map<LocalDate, Integer> dailyCounts = new HashMap<>();
 
@@ -169,7 +161,6 @@ public class StatsServiceImpl implements StatsService {
             dailyCounts.put(date, dailyCounts.getOrDefault(date, 0) + 1);
         }
 
-        // Convert to DTOs
         return dailyTotals.entrySet().stream()
                 .map(entry -> new DailyCaloriesDto(
                         entry.getKey().toString(),
@@ -177,18 +168,16 @@ public class StatsServiceImpl implements StatsService {
                         dailyCounts.getOrDefault(entry.getKey(), 0)
                 ))
                 .sorted((a, b) -> b.date().compareTo(a.date()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
-     * Calcule la série de jours consécutifs actifs de l'utilisateur.
-     * Un jour est "actif" s'il contient au moins 1 meal.
-     * current : série depuis aujourd'hui en remontant (ou depuis hier si aujourd'hui inactif).
+     * Calcule la série de jours consécutifs actifs.
+     * current : série depuis aujourd'hui (ou hier si aujourd'hui inactif).
      * longest : plus longue série jamais réalisée.
      */
     @Override
     public StreakDto getStreak(Long userId) {
-        // Récupère tous les repas de l'utilisateur (sans limite)
         List<Meal> allMeals = mealRepository.findAllByUserId(
                 userId, org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)
         ).getContent();
@@ -197,17 +186,12 @@ public class StatsServiceImpl implements StatsService {
             return new StreakDto(0, 0);
         }
 
-        // Ensemble des jours actifs
         Set<LocalDate> activeDays = new HashSet<>();
         for (Meal meal : allMeals) {
             activeDays.add(meal.getUploadedAt().toLocalDate());
         }
 
         LocalDate today = LocalDate.now();
-
-        // Calcul du current streak :
-        // On tolère que aujourd'hui soit inactif (le jour n'est pas terminé).
-        // On part de "today" si actif, sinon de "yesterday".
         LocalDate cursor = activeDays.contains(today) ? today : today.minusDays(1);
         int current = 0;
         while (activeDays.contains(cursor)) {
@@ -215,11 +199,7 @@ public class StatsServiceImpl implements StatsService {
             cursor = cursor.minusDays(1);
         }
 
-        // Calcul du longest streak : on trie les jours actifs et on cherche la plus longue suite
-        List<LocalDate> sortedDays = activeDays.stream()
-                .sorted()
-                .collect(Collectors.toList());
-
+        List<LocalDate> sortedDays = activeDays.stream().sorted().toList();
         int longest = 0;
         int run = 0;
         LocalDate prev = null;
@@ -262,11 +242,37 @@ public class StatsServiceImpl implements StatsService {
         LocalDateTime toDt = today.plusDays(1).atStartOfDay();
 
         List<Meal> meals = mealRepository.findAllByUserIdAndUploadedAtBetween(userId, fromDt, toDt);
+        WeeklyStats ws = aggregateWeeklyMeals(meals);
 
-        // Breakdown par jour
+        String bestDay = ws.byDay().entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(e -> e.getKey().toString())
+                .orElse(null);
+        Double bestDayKcal = ws.byDay().values().stream().max(Double::compareTo).orElse(null);
+        String topDish = ws.dishCounts().entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        String summary = buildSummaryText(meals, ws, from, today, bestDay, bestDayKcal, topDish);
+
+        return new WeeklySummaryDto(
+                summary,
+                from.toString(),
+                today.toString(),
+                meals.size(),
+                ws.totalKcal(),
+                bestDay,
+                bestDayKcal
+        );
+    }
+
+    private WeeklyStats aggregateWeeklyMeals(List<Meal> meals) {
         Map<LocalDate, Double> byDay = new HashMap<>();
         double totalKcal = 0;
-        double totalProt = 0, totalCarbs = 0, totalFat = 0;
+        double totalProt = 0;
+        double totalCarbs = 0;
+        double totalFat = 0;
         int mealsWithMacros = 0;
         Map<String, Integer> dishCounts = new HashMap<>();
 
@@ -281,7 +287,7 @@ public class StatsServiceImpl implements StatsService {
             }
             if (a != null) {
                 double[] macros = extractMealMacros(a.getDetectedItemsJson());
-                if (macros != null) {
+                if (macros.length > 0) {
                     totalProt += macros[0];
                     totalCarbs += macros[1];
                     totalFat += macros[2];
@@ -289,90 +295,61 @@ public class StatsServiceImpl implements StatsService {
                 }
             }
         }
-
-        String bestDay = byDay.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(e -> e.getKey().toString())
-                .orElse(null);
-        Double bestDayKcal = byDay.values().stream().max(Double::compareTo).orElse(null);
-        String topDish = dishCounts.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
-
-        String summary;
-        if (meals.size() < 2) {
-            summary = "Pas encore assez de repas cette semaine pour un bilan detaille. Continue a scanner tes plats, et ton coach IA prendra le relais des la semaine prochaine !";
-        } else {
-            double avgKcal = totalKcal / Math.max(byDay.size(), 1);
-            double avgProt = mealsWithMacros > 0 ? totalProt / mealsWithMacros : 0;
-            double avgCarbs = mealsWithMacros > 0 ? totalCarbs / mealsWithMacros : 0;
-            double avgFat = mealsWithMacros > 0 ? totalFat / mealsWithMacros : 0;
-
-            String userPrompt = """
-                    Periode : du %s au %s (%d jours actifs).
-                    Repas scannes : %d. Calories totales : %.0f kcal. Moyenne journaliere : %.0f kcal.
-                    Macros moyennes par repas : proteines %.0f g, glucides %.0f g, lipides %.0f g.
-                    Meilleur jour en apport : %s (%.0f kcal).
-                    Plat le plus frequent : %s.
-                    """.formatted(
-                    from, today, byDay.size(), meals.size(), totalKcal, avgKcal,
-                    avgProt, avgCarbs, avgFat,
-                    bestDay != null ? bestDay : "non defini", bestDayKcal != null ? bestDayKcal : 0,
-                    topDish != null ? topDish : "aucun"
-            );
-
-            try {
-                summary = ollamaService.chatText(SUMMARY_SYSTEM_PROMPT, userPrompt, false).trim();
-            } catch (Exception ex) {
-                log.warn("Weekly summary LLM call failed, using fallback: {}", ex.getMessage());
-                summary = "Tu as scanne %d repas sur les 7 derniers jours pour un total de %.0f kcal. Continue comme ca !"
-                        .formatted(meals.size(), totalKcal);
-            }
-        }
-
-        return new WeeklySummaryDto(
-                summary,
-                from.toString(),
-                today.toString(),
-                meals.size(),
-                totalKcal,
-                bestDay,
-                bestDayKcal
-        );
+        return new WeeklyStats(byDay, totalKcal, totalProt, totalCarbs, totalFat, mealsWithMacros, dishCounts);
     }
+
+    private String buildSummaryText(List<Meal> meals, WeeklyStats ws,
+                                    LocalDate from, LocalDate today,
+                                    String bestDay, Double bestDayKcal, String topDish) {
+        if (meals.size() < 2) {
+            return "Pas encore assez de repas cette semaine pour un bilan detaille. Continue a scanner tes plats, et ton coach IA prendra le relais des la semaine prochaine !";
+        }
+        double avgKcal = ws.totalKcal() / Math.max(ws.byDay().size(), 1);
+        double avgProt = ws.mealsWithMacros() > 0 ? ws.totalProt() / ws.mealsWithMacros() : 0;
+        double avgCarbs = ws.mealsWithMacros() > 0 ? ws.totalCarbs() / ws.mealsWithMacros() : 0;
+        double avgFat = ws.mealsWithMacros() > 0 ? ws.totalFat() / ws.mealsWithMacros() : 0;
+
+        String userPrompt = """
+                Periode : du %s au %s (%d jours actifs).
+                Repas scannes : %d. Calories totales : %.0f kcal. Moyenne journaliere : %.0f kcal.
+                Macros moyennes par repas : proteines %.0f g, glucides %.0f g, lipides %.0f g.
+                Meilleur jour en apport : %s (%.0f kcal).
+                Plat le plus frequent : %s.
+                """.formatted(
+                from, today, ws.byDay().size(), meals.size(), ws.totalKcal(), avgKcal,
+                avgProt, avgCarbs, avgFat,
+                bestDay != null ? bestDay : "non defini", bestDayKcal != null ? bestDayKcal : 0,
+                topDish != null ? topDish : "aucun"
+        );
+
+        try {
+            return ollamaService.chatText(SUMMARY_SYSTEM_PROMPT, userPrompt, false).trim();
+        } catch (Exception ex) {
+            log.warn("Weekly summary LLM call failed, using fallback: {}", ex.getMessage());
+            return "Tu as scanne %d repas sur les 7 derniers jours pour un total de %.0f kcal. Continue comme ca !"
+                    .formatted(meals.size(), ws.totalKcal());
+        }
+    }
+
+    private record WeeklyStats(Map<LocalDate, Double> byDay, double totalKcal,
+                                double totalProt, double totalCarbs, double totalFat,
+                                int mealsWithMacros, Map<String, Integer> dishCounts) {}
 
     @Override
     public DinnerSuggestionDto getMealSuggestion(Long userId) {
         LocalDateTime now = LocalDateTime.now();
         MealType nextType = MealType.detectFromTime(now);
 
-        // Contexte : stats 7 derniers jours (reutilise getWeeklySummary en interne)
         LocalDate today = LocalDate.now();
         LocalDateTime fromDt = today.minusDays(6).atStartOfDay();
         LocalDateTime toDt = today.plusDays(1).atStartOfDay();
         List<Meal> meals = mealRepository.findAllByUserIdAndUploadedAtBetween(userId, fromDt, toDt);
 
-        double totalProt = 0, totalCarbs = 0, totalFat = 0, totalKcal = 0;
-        int mealsWithMacros = 0;
-        Set<String> recentDishes = new HashSet<>();
-        for (Meal m : meals) {
-            MealAnalysis a = m.getAnalysis();
-            if (a == null) continue;
-            if (a.getEstimatedTotalCalories() != null) totalKcal += a.getEstimatedTotalCalories();
-            if (a.getDetectedDishName() != null) recentDishes.add(a.getDetectedDishName());
-            double[] macros = extractMealMacros(a.getDetectedItemsJson());
-            if (macros != null) {
-                totalProt += macros[0];
-                totalCarbs += macros[1];
-                totalFat += macros[2];
-                mealsWithMacros++;
-            }
-        }
+        RecentStats rs = aggregateRecentMeals(meals);
 
-        double avgProt = mealsWithMacros > 0 ? totalProt / mealsWithMacros : 0;
-        double avgCarbs = mealsWithMacros > 0 ? totalCarbs / mealsWithMacros : 0;
-        double avgFat = mealsWithMacros > 0 ? totalFat / mealsWithMacros : 0;
+        double avgProt = rs.mealsWithMacros() > 0 ? rs.totalProt() / rs.mealsWithMacros() : 0;
+        double avgCarbs = rs.mealsWithMacros() > 0 ? rs.totalCarbs() / rs.mealsWithMacros() : 0;
+        double avgFat = rs.mealsWithMacros() > 0 ? rs.totalFat() / rs.mealsWithMacros() : 0;
 
         String typeFr = switch (nextType) {
             case BREAKFAST -> "petit-dejeuner";
@@ -389,22 +366,49 @@ public class StatsServiceImpl implements StatsService {
                 Suggere 1 plat equilibre adapte a cette heure et a ces stats, en evitant de reproposer un plat deja vu.
                 """.formatted(
                 typeFr, now.getHour(), now.getMinute(),
-                meals.size(), totalKcal,
+                meals.size(), rs.totalKcal(),
                 avgProt, avgCarbs, avgFat,
-                recentDishes.isEmpty() ? "aucun" : String.join(", ", recentDishes)
+                rs.recentDishes().isEmpty() ? "aucun" : String.join(", ", rs.recentDishes())
         );
 
+        return parseSuggestion(userPrompt, nextType);
+    }
+
+    private RecentStats aggregateRecentMeals(List<Meal> meals) {
+        double totalProt = 0;
+        double totalCarbs = 0;
+        double totalFat = 0;
+        double totalKcal = 0;
+        int mealsWithMacros = 0;
+        Set<String> recentDishes = new HashSet<>();
+
+        for (Meal m : meals) {
+            MealAnalysis a = m.getAnalysis();
+            if (a == null) continue;
+            if (a.getEstimatedTotalCalories() != null) totalKcal += a.getEstimatedTotalCalories();
+            if (a.getDetectedDishName() != null) recentDishes.add(a.getDetectedDishName());
+            double[] macros = extractMealMacros(a.getDetectedItemsJson());
+            if (macros.length > 0) {
+                totalProt += macros[0];
+                totalCarbs += macros[1];
+                totalFat += macros[2];
+                mealsWithMacros++;
+            }
+        }
+        return new RecentStats(totalProt, totalCarbs, totalFat, totalKcal, mealsWithMacros, recentDishes);
+    }
+
+    private DinnerSuggestionDto parseSuggestion(String userPrompt, MealType nextType) {
         try {
             String raw = ollamaService.chatText(SUGGESTION_SYSTEM_PROMPT, userPrompt, true);
             JsonNode node = objectMapper.readTree(raw);
             String dish = node.has("dishName") ? node.get("dishName").asText("Suggestion indisponible") : "Suggestion indisponible";
             String reason = node.has("reason") ? node.get("reason").asText("") : "";
-            Integer kcal = node.has("estimatedCalories") && node.get("estimatedCalories").canConvertToInt()
-                    ? node.get("estimatedCalories").asInt() : null;
+            Integer kcal = node.has(FIELD_ESTIMATED_CALS) && node.get(FIELD_ESTIMATED_CALS).canConvertToInt()
+                    ? node.get(FIELD_ESTIMATED_CALS).asInt() : null;
             return new DinnerSuggestionDto(dish, reason, kcal, nextType.name());
         } catch (Exception ex) {
             log.warn("Meal suggestion LLM call failed: {}", ex.getMessage());
-            // Fallback simple mais honnete
             String fallback = switch (nextType) {
                 case BREAKFAST -> "Porridge avoine-fruits rouges";
                 case LUNCH -> "Poke bowl saumon-avocat";
@@ -419,4 +423,7 @@ public class StatsServiceImpl implements StatsService {
             );
         }
     }
+
+    private record RecentStats(double totalProt, double totalCarbs, double totalFat,
+                               double totalKcal, int mealsWithMacros, Set<String> recentDishes) {}
 }

@@ -88,7 +88,7 @@ public class AnalysisController {
                 String full = ollamaService.streamAnalyzeImage(imagePath, prompt, token -> {
                     try {
                         emitter.send(toJsonLine(Map.of("type", "token", "content", token)), MediaType.APPLICATION_JSON);
-                    } catch (Exception ignored) { /* client parti, on laisse le thread finir proprement */ }
+                    } catch (Exception _) { /* client parti, on laisse le thread finir proprement */ }
                 });
 
                 MealAnalysisResponseDto dto = analysisService.persistStreamResult(mealId, full);
@@ -96,10 +96,10 @@ public class AnalysisController {
                 emitter.complete();
             } catch (Exception ex) {
                 log.error("Streaming analysis failed for meal {}: {}", mealId, ex.getMessage(), ex);
-                try { analysisService.markFailed(mealId); } catch (Exception ignored) {}
+                try { analysisService.markFailed(mealId); } catch (Exception _) { /* best effort */ }
                 try {
                     emitter.send(toJsonLine(Map.of("type", "error", "message", ex.getMessage() != null ? ex.getMessage() : "analysis failed")), MediaType.APPLICATION_JSON);
-                } catch (Exception ignored) {}
+                } catch (Exception _) { /* best effort */ }
                 emitter.completeWithError(ex);
             }
         }, "ollama-stream-" + mealId);
@@ -112,7 +112,7 @@ public class AnalysisController {
     private String toJsonLine(Object payload) {
         try {
             return objectMapper.writeValueAsString(payload) + "\n";
-        } catch (Exception ex) {
+        } catch (Exception _) {
             return "{\"type\":\"error\",\"message\":\"serialization failed\"}\n";
         }
     }

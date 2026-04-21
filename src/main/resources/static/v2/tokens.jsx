@@ -80,7 +80,7 @@ function last7(meals){
   return out;
 }
 
-window.THEMES=THEMES;
-window.MEALS=MEALS;
-window.dishGradient=dishGradient;
-window.last7=last7;
+globalThis.THEMES=THEMES;
+globalThis.MEALS=MEALS;
+globalThis.dishGradient=dishGradient;
+globalThis.last7=last7;

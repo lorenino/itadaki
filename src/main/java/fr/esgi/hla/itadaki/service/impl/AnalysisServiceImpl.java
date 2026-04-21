@@ -30,6 +30,12 @@ import java.util.List;
 @Transactional
 public class AnalysisServiceImpl implements AnalysisService {
 
+    private static final String MEAL_NOT_FOUND = "Meal not found with id: ";
+    private static final String FIELD_INGREDIENTS = "ingredients";
+    private static final String FIELD_CALORIES_MAX = "caloriesMax";
+    private static final String FIELD_NOM_PLAT = "nomPlat";
+    private static final String FIELD_CONFIANCE = "confiance";
+
     private final MealRepository mealRepository;
     private final MealAnalysisRepository mealAnalysisRepository;
     private final OllamaService ollamaService;
@@ -92,7 +98,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     @Override
     public void markAnalysing(Long mealId) {
         Meal meal = mealRepository.findById(mealId)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+                .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + mealId));
         meal.setStatus(MealStatus.ANALYSING);
         mealRepository.save(meal);
     }
@@ -109,7 +115,7 @@ public class AnalysisServiceImpl implements AnalysisService {
     public MealAnalysisResponseDto persistStreamResult(Long mealId, String rawJson) {
         try {
             Meal meal = mealRepository.findById(mealId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+                    .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + mealId));
 
             JsonNode node = objectMapper.readTree(rawJson);
 
@@ -120,10 +126,10 @@ public class AnalysisServiceImpl implements AnalysisService {
                         a.setMeal(meal);
                         return a;
                     });
-            analysis.setDetectedDishName(extractString(node, "nomPlat"));
+            analysis.setDetectedDishName(extractString(node, FIELD_NOM_PLAT));
             analysis.setDetectedItemsJson(rawJson);
             analysis.setEstimatedTotalCalories(extractCalories(node));
-            analysis.setConfidenceScore(parseConfidence(extractString(node, "confiance")));
+            analysis.setConfidenceScore(parseConfidence(extractString(node, FIELD_CONFIANCE)));
             analysis.setRawModelResponse(rawJson);
             analysis.setAnalyzedAt(java.time.LocalDateTime.now());
 
@@ -142,7 +148,7 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     private Meal findMeal(Long mealId) {
         return mealRepository.findById(mealId)
-                .orElseThrow(() -> new ResourceNotFoundException("Meal not found with id: " + mealId));
+                .orElseThrow(() -> new ResourceNotFoundException(MEAL_NOT_FOUND + mealId));
     }
 
     private void updateMealStatus(Meal meal, MealStatus status) {
@@ -165,10 +171,10 @@ public class AnalysisServiceImpl implements AnalysisService {
     }
 
     private void populateAnalysis(MealAnalysis analysis, JsonNode json, String rawResponse) {
-        analysis.setDetectedDishName(extractString(json, "nomPlat"));
+        analysis.setDetectedDishName(extractString(json, FIELD_NOM_PLAT));
         analysis.setDetectedItemsJson(rawResponse);
         analysis.setEstimatedTotalCalories(extractCalories(json));
-        analysis.setConfidenceScore(parseConfidence(extractString(json, "confiance")));
+        analysis.setConfidenceScore(parseConfidence(extractString(json, FIELD_CONFIANCE)));
         analysis.setRawModelResponse(rawResponse);
     }
 
@@ -189,10 +195,10 @@ public class AnalysisServiceImpl implements AnalysisService {
 
     private Double extractCalories(JsonNode node) {
         try {
-            if (node.has("caloriesMax") && !node.get("caloriesMax").isNull()) {
-                return node.get("caloriesMax").asDouble();
+            if (node.has(FIELD_CALORIES_MAX) && !node.get(FIELD_CALORIES_MAX).isNull()) {
+                return node.get(FIELD_CALORIES_MAX).asDouble();
             }
-        } catch (Exception ex) {
+        } catch (Exception _) {
             // fall through
         }
         return null;
@@ -212,8 +218,8 @@ public class AnalysisServiceImpl implements AnalysisService {
         List<DetectedFoodItemDto> items = new ArrayList<>();
         try {
             JsonNode node = objectMapper.readTree(jsonString);
-            if (node.has("ingredients") && node.get("ingredients").isArray()) {
-                for (JsonNode ingredient : node.get("ingredients")) {
+            if (node.has(FIELD_INGREDIENTS) && node.get(FIELD_INGREDIENTS).isArray()) {
+                for (JsonNode ingredient : node.get(FIELD_INGREDIENTS)) {
                     if (ingredient.isTextual()) {
                         items.add(ingredientFromString(ingredient.asText()));
                     } else if (ingredient.isObject()) {
@@ -221,7 +227,7 @@ public class AnalysisServiceImpl implements AnalysisService {
                     }
                 }
             }
-        } catch (Exception ex) {
+        } catch (Exception _) {
             // Return empty list on parse failure
         }
         return items;

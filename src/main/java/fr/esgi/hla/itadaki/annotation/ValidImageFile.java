@@ -10,10 +10,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Bean Validation constraint annotation for validating uploaded image files.
- * Backed by ImageFileValidator which checks MIME type, file size, and extension.
- */
+/** Validates uploaded image files via ImageFileValidator (MIME type, size, extension). */
 @Documented
 @Constraint(validatedBy = ImageFileValidator.class)
 @Target({ElementType.PARAMETER, ElementType.FIELD})

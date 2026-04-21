@@ -5,33 +5,23 @@ import fr.esgi.hla.itadaki.dto.correction.CorrectedFoodItemDto;
 import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Component;
 
-/**
- * Validates business rules for meal correction requests.
- * Enforces data consistency and constraint checking.
- */
+/** Validates business rules for meal correction requests. */
 @Component
 public class MealCorrectionValidator {
 
-    /**
-     * Validates a meal correction request.
-     * Throws ResourceNotFoundException if validation fails.
-     */
     public void validate(MealCorrectionRequestDto request) {
         if (request == null) {
             throw new ResourceNotFoundException("Correction request must not be null");
         }
 
-        // Validate corrected items list
         if (request.correctedItems() == null || request.correctedItems().isEmpty()) {
             throw new ResourceNotFoundException("Corrected items list must not be empty");
         }
 
-        // Validate each corrected item
         for (CorrectedFoodItemDto item : request.correctedItems()) {
             validateFoodItem(item);
         }
 
-        // Validate corrected total calories
         if (request.correctedTotalCalories() != null && request.correctedTotalCalories() < 0) {
             throw new ResourceNotFoundException("Corrected total calories must not be negative");
         }

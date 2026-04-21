@@ -7,6 +7,7 @@ import fr.esgi.hla.itadaki.business.enums.MealStatus;
 import fr.esgi.hla.itadaki.dto.correction.CorrectedFoodItemDto;
 import fr.esgi.hla.itadaki.dto.correction.MealCorrectionRequestDto;
 import fr.esgi.hla.itadaki.dto.correction.MealCorrectionResponseDto;
+import fr.esgi.hla.itadaki.exception.MealAnalysisException;
 import fr.esgi.hla.itadaki.exception.ResourceNotFoundException;
 import fr.esgi.hla.itadaki.mapper.MealCorrectionMapper;
 import fr.esgi.hla.itadaki.repository.MealCorrectionRepository;
@@ -19,10 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Implementation of CorrectionService.
- * Handles user corrections to meal analysis results.
- */
+/** Stores and retrieves user corrections for meal analysis results. */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -54,7 +52,7 @@ public class CorrectionServiceImpl implements CorrectionService {
             String correctedItemsJson = objectMapper.writeValueAsString(request.correctedItems());
             correction.setCorrectedItemsJson(correctedItemsJson);
         } catch (Exception ex) {
-            throw new RuntimeException("Failed to serialize correction items: " + ex.getMessage(), ex);
+            throw new MealAnalysisException("Failed to serialize correction items: " + ex.getMessage(), ex);
         }
 
         correction = mealCorrectionRepository.save(correction);
@@ -103,11 +101,9 @@ public class CorrectionServiceImpl implements CorrectionService {
         try {
             if (jsonString != null && !jsonString.isBlank()) {
                 CorrectedFoodItemDto[] itemArray = objectMapper.readValue(jsonString, CorrectedFoodItemDto[].class);
-                for (CorrectedFoodItemDto item : itemArray) {
-                    items.add(item);
-                }
+                java.util.Collections.addAll(items, itemArray);
             }
-        } catch (Exception ex) {
+        } catch (Exception _) {
             // If parsing fails, return empty list
         }
         return items;

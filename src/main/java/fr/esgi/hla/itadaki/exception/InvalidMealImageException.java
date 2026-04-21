@@ -1,10 +1,6 @@
 package fr.esgi.hla.itadaki.exception;
 
-/**
- * TODO: Thrown when an uploaded file is not a valid meal image.
- *       Reasons: wrong MIME type, file too large, corrupt image, etc.
- *       GlobalExceptionHandler maps this to HTTP 400.
- */
+/** Thrown when an uploaded file is not a valid meal image (wrong MIME type, too large, corrupt); mapped to HTTP 400. */
 public class InvalidMealImageException extends RuntimeException {
 
     public InvalidMealImageException(String message) {

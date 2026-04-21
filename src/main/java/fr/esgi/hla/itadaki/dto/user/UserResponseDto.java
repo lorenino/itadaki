@@ -4,11 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
 
-/**
- * DTO for returning user profile data in API responses.
- * Never expose passwordHash through this DTO.
- * TODO: Map from User entity via UserMapper.
- */
+/** DTO for returning user profile data — never exposes passwordHash. */
 public record UserResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         String username,

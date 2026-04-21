@@ -2,13 +2,7 @@ package fr.esgi.hla.itadaki.service;
 
 import org.springframework.security.core.userdetails.UserDetails;
 
-/**
- * Service interface for JWT token operations.
- * - generateToken(UserDetails userDetails) → String
- * - extractUsername(String token)          → String
- * - isTokenValid(String token, UserDetails) → boolean
- * - extractExpiration(String token)         → Date
- */
+/** Generates and validates JWT tokens. */
 public interface JwtService {
 
     String generateToken(UserDetails userDetails);

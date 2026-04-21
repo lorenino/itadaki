@@ -13,6 +13,7 @@ import fr.esgi.hla.itadaki.repository.MealRepository;
 import fr.esgi.hla.itadaki.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
@@ -28,10 +29,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Creates 3 demo accounts with pre-filled meal history on startup.
- * Skipped if demo accounts already exist (idempotent on restart).
- */
+/** Creates 3 demo accounts with pre-filled meal history on startup (idempotent on restart). */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -42,6 +40,9 @@ public class DataSeeder {
     private final MealPhotoRepository mealPhotoRepository;
     private final MealAnalysisRepository mealAnalysisRepository;
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${demo.seed.password:itadaki12345}")
+    private String demoPwd;
 
     record PlatInfo(String nom, int kcal, MealType type, String proteines, String glucides, String lipides) {}
     record CompteDemo(String email, String username, int platOffset) {}
@@ -88,14 +89,14 @@ public class DataSeeder {
 
         log.info("DataSeeder : création des comptes démo et de l'historique pré-rempli...");
 
-        String hashedPassword = passwordEncoder.encode("itadaki12345");
+        String hashedPassword = passwordEncoder.encode(demoPwd);
         LocalDateTime now = LocalDateTime.now();
 
         for (CompteDemo compte : COMPTES) {
             User user = createDemoUser(compte, hashedPassword);
             for (int i = 0; i < 4; i++) {
                 PlatInfo plat = PLATS.get((compte.platOffset() + i) % PLATS.size());
-                LocalDateTime uploadedAt = mealTimeFor(plat.type(), now.minusDays(4 - i));
+                LocalDateTime uploadedAt = mealTimeFor(plat.type(), now.minusDays((long) 4 - i));
                 createMealEntry(user, plat, uploadedAt);
             }
         }

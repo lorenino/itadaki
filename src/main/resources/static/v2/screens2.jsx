@@ -62,7 +62,7 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
         <div style={{ width: '100%', background: T.bgAlt, borderRadius: 18, padding: 18, fontFamily: 'JetBrains Mono,monospace', fontSize: 13, color: T.inkMuted }}>
           {['→ plat détecté', '→ ingrédients: 6/7', '→ portion estimée', '→ calories…']
             .slice(0, Math.min(4, Math.ceil(prog / 25)))
-            .map((l, i) => <div key={i} style={{ padding: '3px 0', opacity: 1, animation: 'rise .3s ease' }}>{l}</div>)
+            .map((l, i) => <div key={`line-${i}`} style={{ padding: '3px 0', opacity: 1, animation: 'rise .3s ease' }}>{l}</div>)
           }
           <div style={{ height: 3, background: T.hairline, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
             <div style={{ width: `${prog}%`, height: '100%', background: T.accent, transition: 'width .3s' }} />
@@ -74,7 +74,7 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
       <div key="v3" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, width: '100%', maxWidth: 360 }}>
         <div style={{ position: 'relative', width: 160, height: 160 }}>
           {[0, 1, 2, 3, 4].map(i => (
-            <div key={i} style={{
+            <div key={`dot-${i}`} style={{
               position: 'absolute', left: '50%', top: '50%',
               width: 10, height: 10, borderRadius: '50%',
               background: i % 2 ? T.accent : T.matcha,
@@ -258,7 +258,7 @@ function History({ T, meals, onMeal, mobile }) {
     const k = m.date.slice(0, 10);
     (groups[k] = groups[k] || []).push(m);
   });
-  const days = Object.keys(groups).sort().reverse();
+  const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
   const dayName = (k) => {
     const d = new Date(k + 'T12:00:00');
@@ -399,4 +399,4 @@ function RowLink({ T, label, href }) {
   );
 }
 
-Object.assign(window, { Upload, Correction, History, Profile });
+Object.assign(globalThis, { Upload, Correction, History, Profile });

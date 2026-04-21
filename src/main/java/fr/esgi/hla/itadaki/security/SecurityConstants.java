@@ -1,16 +1,14 @@
 package fr.esgi.hla.itadaki.security;
 
-/**
- * Holds shared security constants used across the security layer.
- */
+/** Holds shared security constants used across the security layer. */
 public final class SecurityConstants {
-    private SecurityConstants() {
-    }
+    protected SecurityConstants() {}
 
     public static final String TOKEN_PREFIX = "Bearer ";
     public static final String HEADER_STRING = "Authorization";
     public static final long JWT_EXPIRATION_MS = 86_400_000L; // 24h
-    public static final String[] PUBLIC_URLS = {
+
+    private static final String[] PUBLIC_URLS = {
             "/api/auth/**",
             "/h2-console/**",
             "/swagger-ui/**",
@@ -23,4 +21,8 @@ public final class SecurityConstants {
             "/v2/**",
             "/uploads/**"
     };
+
+    public static String[] publicUrls() {
+        return PUBLIC_URLS.clone();
+    }
 }

@@ -14,19 +14,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
-/**
- * Centralized exception handler for the REST API.
- * Catches application-specific and Spring exceptions and maps them
- * to standardized ErrorResponse payloads with appropriate HTTP status codes.
- *
- * Handles:
- * - ResourceNotFoundException     → 404 Not Found
- * - UnauthorizedException         → 401 Unauthorized
- * - InvalidMealImageException     → 400 Bad Request
- * - MealAnalysisException         → 500 Internal Server Error
- * - MethodArgumentNotValidException → 400 with field validation errors
- * - Generic Exception              → 500 fallback
- */
+/** Centralized REST API exception handler — maps domain and Spring exceptions to standardized ErrorResponse payloads. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -51,8 +39,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthorizationDeniedException.class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     public ErrorResponse handleAccessDenied(AuthorizationDeniedException ex, HttpServletRequest request) {
-        // Declenchee par @PreAuthorize quand le role attendu n'est pas present.
-        // Sans ce handler, tombait dans le fallback generic -> 500.
         return new ErrorResponse(HttpStatus.FORBIDDEN.value(), "Access denied", request.getRequestURI());
     }
 
@@ -75,9 +61,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
+    @ResponseStatus(HttpStatus.REQUEST_ENTITY_TOO_LARGE)
     public ErrorResponse handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
-        return new ErrorResponse(HttpStatus.PAYLOAD_TOO_LARGE.value(),
+        return new ErrorResponse(HttpStatus.REQUEST_ENTITY_TOO_LARGE.value(),
                 "Fichier trop volumineux : 30 Mo maximum.",
                 request.getRequestURI());
     }
@@ -85,8 +71,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleHandlerMethodValidation(HandlerMethodValidationException ex, HttpServletRequest request) {
-        // Validations au niveau parametre de methode (ex: @ValidImageFile sur un MultipartFile).
-        // Avant ce handler, ca tombait dans le fallback generic -> 500.
         String message = ex.getAllErrors().stream()
                 .map(org.springframework.context.MessageSourceResolvable::getDefaultMessage)
                 .filter(m -> m != null && !m.isBlank())

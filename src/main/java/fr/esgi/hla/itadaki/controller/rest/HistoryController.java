@@ -19,10 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * REST controller for meal history endpoints.
- * Provides paginated and date-based meal history retrieval for authenticated users.
- */
+/** REST controller exposing /api/history with paginated and date-based meal retrieval. */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/history")

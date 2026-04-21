@@ -13,10 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Implementation of HistoryService.
- * Retrieves paginated and date-filtered meal history for users.
- */
+/** Retrieves paginated and date-filtered meal history for users. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)

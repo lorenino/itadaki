@@ -15,10 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * REST controller for authentication endpoints.
- * Handles user registration and login.
- */
+/** REST controller exposing /api/auth registration and login endpoints. */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/auth")

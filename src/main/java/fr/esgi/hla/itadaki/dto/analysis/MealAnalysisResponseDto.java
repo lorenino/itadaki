@@ -6,11 +6,7 @@ import fr.esgi.hla.itadaki.dto.meal.DetectedFoodItemDto;
 import java.io.Serializable;
 import java.util.List;
 
-/**
- * DTO for returning the AI analysis result of a meal.
- * TODO: Step 3 — populated via MealAnalysisMapper.toDto(MealAnalysis).
- *       detectedItems parsed from MealAnalysis.detectedItemsJson via ObjectMapper in AnalysisServiceImpl.
- */
+/** DTO for returning the AI analysis result of a meal. */
 public record MealAnalysisResponseDto(
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long id,
         @JsonProperty(access = JsonProperty.Access.READ_ONLY) Long mealId,

@@ -19,10 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * REST controller for nutrition statistics endpoints.
- * Provides aggregated calorie and nutrition data for authenticated users.
- */
+/** REST controller exposing /api/stats aggregated nutrition and AI-generated insight endpoints. */
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/stats")

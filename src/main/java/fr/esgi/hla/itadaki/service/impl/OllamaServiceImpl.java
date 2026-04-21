@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -30,6 +31,22 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 @Slf4j
 public class OllamaServiceImpl implements OllamaService {
+
+    private static final String KEY_MODEL       = "model";
+    private static final String KEY_MESSAGES    = "messages";
+    private static final String KEY_MESSAGE     = "message";
+    private static final String KEY_STREAM      = "stream";
+    private static final String KEY_FORMAT      = "format";
+    private static final String KEY_OPTIONS     = "options";
+    private static final String KEY_TEMPERATURE = "temperature";
+    private static final String KEY_NUM_CTX     = "num_ctx";
+    private static final String KEY_ROLE        = "role";
+    private static final String KEY_CONTENT     = "content";
+    private static final String KEY_IMAGES      = "images";
+    private static final String ROLE_SYSTEM     = "system";
+    private static final String ROLE_USER       = "user";
+    private static final String API_CHAT        = "/api/chat";
+    private static final String FORMAT_JSON     = "json";
 
     private static final String SYSTEM_PROMPT = """
             Tu es un nutritionniste analysant la photo d'une assiette.
@@ -78,15 +95,15 @@ public class OllamaServiceImpl implements OllamaService {
             String base64Image = encodeImageToBase64(imagePath);
             Map<String, Object> body = buildRequestBody(prompt, base64Image);
 
-            log.debug("Calling Ollama /api/chat with model={} for image={}", model, imagePath);
+            log.debug("Calling Ollama {} with model={} for image={}", API_CHAT, model, imagePath);
             OllamaChatResponse response = ollamaRestClient.post()
-                    .uri("/api/chat")
+                    .uri(API_CHAT)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .body(OllamaChatResponse.class);
 
-            return extractContent(response, imagePath);
+            return extractContent(response);
         } catch (MealAnalysisException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -99,21 +116,21 @@ public class OllamaServiceImpl implements OllamaService {
     public String chatText(String systemPrompt, String userPrompt, boolean jsonMode) {
         try {
             Map<String, Object> body = new java.util.HashMap<>();
-            body.put("model", model);
-            body.put("messages", List.of(
-                    Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userPrompt)
+            body.put(KEY_MODEL, model);
+            body.put(KEY_MESSAGES, List.of(
+                    Map.of(KEY_ROLE, ROLE_SYSTEM, KEY_CONTENT, systemPrompt),
+                    Map.of(KEY_ROLE, ROLE_USER, KEY_CONTENT, userPrompt)
             ));
-            body.put("stream", false);
-            if (jsonMode) body.put("format", "json");
-            body.put("options", Map.of(
-                    "temperature", jsonMode ? 0.3 : 0.7,
-                    "num_ctx", 4096
+            body.put(KEY_STREAM, false);
+            if (jsonMode) body.put(KEY_FORMAT, FORMAT_JSON);
+            body.put(KEY_OPTIONS, Map.of(
+                    KEY_TEMPERATURE, jsonMode ? 0.3 : 0.7,
+                    KEY_NUM_CTX, 4096
             ));
 
-            log.debug("Calling Ollama /api/chat text-only (jsonMode={})", jsonMode);
+            log.debug("Calling Ollama {} text-only (jsonMode={})", API_CHAT, jsonMode);
             OllamaChatResponse response = ollamaRestClient.post()
-                    .uri("/api/chat")
+                    .uri(API_CHAT)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -137,22 +154,16 @@ public class OllamaServiceImpl implements OllamaService {
             byte[] bytes = Files.readAllBytes(Path.of(imagePath));
             String base64 = Base64.getEncoder().encodeToString(bytes);
 
+            String userContent = prompt == null || prompt.isBlank() ? DEFAULT_USER_PROMPT : prompt;
             Map<String, Object> body = Map.of(
-                    "model", model,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", SYSTEM_PROMPT),
-                            Map.of(
-                                    "role", "user",
-                                    "content", prompt == null || prompt.isBlank() ? DEFAULT_USER_PROMPT : prompt,
-                                    "images", List.of(base64)
-                            )
+                    KEY_MODEL, model,
+                    KEY_MESSAGES, List.of(
+                            Map.of(KEY_ROLE, ROLE_SYSTEM, KEY_CONTENT, SYSTEM_PROMPT),
+                            Map.of(KEY_ROLE, ROLE_USER, KEY_CONTENT, userContent, KEY_IMAGES, List.of(base64))
                     ),
-                    "stream", true,
-                    "format", "json",
-                    "options", Map.of(
-                            "temperature", 0.2,
-                            "num_ctx", 4096
-                    )
+                    KEY_STREAM, true,
+                    KEY_FORMAT, FORMAT_JSON,
+                    KEY_OPTIONS, Map.of(KEY_TEMPERATURE, 0.2, KEY_NUM_CTX, 4096)
             );
             String jsonBody = objectMapper.writeValueAsString(body);
 
@@ -162,7 +173,7 @@ public class OllamaServiceImpl implements OllamaService {
                     .connectTimeout(Duration.ofSeconds(30))
                     .build();
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/api/chat"))
+                    .uri(URI.create(baseUrl + API_CHAT))
                     .timeout(Duration.ofMinutes(10))
                     .header("Content-Type", "application/json")
                     .header("ngrok-skip-browser-warning", "any")
@@ -174,35 +185,44 @@ public class OllamaServiceImpl implements OllamaService {
                 throw new MealAnalysisException("Ollama returned HTTP " + response.statusCode());
             }
 
-            StringBuilder full = new StringBuilder();
-            try (Stream<String> lines = response.body()) {
-                lines.forEach(line -> {
-                    if (line.isBlank()) return;
-                    try {
-                        JsonNode node = objectMapper.readTree(line);
-                        JsonNode msg = node.get("message");
-                        if (msg != null) {
-                            JsonNode content = msg.get("content");
-                            if (content != null && content.isTextual()) {
-                                String token = content.asText();
-                                if (!token.isEmpty()) {
-                                    full.append(token);
-                                    try { onToken.accept(token); } catch (Exception ignored) { /* ne pas bloquer le stream */ }
-                                }
-                            }
-                        }
-                    } catch (Exception ex) {
-                        log.debug("Could not parse Ollama stream line: {}", line);
-                    }
-                });
-            }
-            return full.toString();
+            return collectStreamOutput(response.body(), onToken);
 
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new MealAnalysisException("Ollama streaming analysis interrupted", ex);
         } catch (MealAnalysisException ex) {
             throw ex;
         } catch (Exception ex) {
             log.error("Ollama streaming analysis failed for image {}: {}", imagePath, ex.getMessage(), ex);
             throw new MealAnalysisException("Ollama streaming analysis failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    private String collectStreamOutput(Stream<String> streamLines, Consumer<String> onToken) {
+        StringBuilder full = new StringBuilder();
+        try (Stream<String> lines = streamLines) {
+            lines.forEach(line -> processStreamLine(line, full, onToken));
+        }
+        return full.toString();
+    }
+
+    private void processStreamLine(String line, StringBuilder full, Consumer<String> onToken) {
+        if (line.isBlank()) return;
+        try {
+            JsonNode node = objectMapper.readTree(line);
+            JsonNode msg = node.get(KEY_MESSAGE);
+            if (msg != null) {
+                JsonNode content = msg.get(KEY_CONTENT);
+                if (content != null && content.isTextual()) {
+                    String token = content.asText();
+                    if (!token.isEmpty()) {
+                        full.append(token);
+                        safeEmitToken(onToken, token);
+                    }
+                }
+            }
+        } catch (Exception _) {
+            log.debug("Could not parse Ollama stream line: {}", line);
         }
     }
 
@@ -223,7 +243,15 @@ public class OllamaServiceImpl implements OllamaService {
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
-    private String encodeImageToBase64(String imagePath) throws Exception {
+    private void safeEmitToken(Consumer<String> onToken, String token) {
+        try {
+            onToken.accept(token);
+        } catch (Exception _) {
+            // do not block the stream
+        }
+    }
+
+    private String encodeImageToBase64(String imagePath) throws IOException {
         byte[] bytes = Files.readAllBytes(Path.of(imagePath));
         return Base64.getEncoder().encodeToString(bytes);
     }
@@ -231,18 +259,18 @@ public class OllamaServiceImpl implements OllamaService {
     private Map<String, Object> buildRequestBody(String prompt, String base64Image) {
         String userPrompt = (prompt == null || prompt.isBlank()) ? DEFAULT_USER_PROMPT : prompt;
         return Map.of(
-                "model", model,
-                "messages", List.of(
-                        Map.of("role", "system", "content", SYSTEM_PROMPT),
-                        Map.of("role", "user", "content", userPrompt, "images", List.of(base64Image))
+                KEY_MODEL, model,
+                KEY_MESSAGES, List.of(
+                        Map.of(KEY_ROLE, ROLE_SYSTEM, KEY_CONTENT, SYSTEM_PROMPT),
+                        Map.of(KEY_ROLE, ROLE_USER, KEY_CONTENT, userPrompt, KEY_IMAGES, List.of(base64Image))
                 ),
-                "stream", false,
-                "format", "json",
-                "options", Map.of("temperature", 0.2, "num_ctx", 4096)
+                KEY_STREAM, false,
+                KEY_FORMAT, FORMAT_JSON,
+                KEY_OPTIONS, Map.of(KEY_TEMPERATURE, 0.2, KEY_NUM_CTX, 4096)
         );
     }
 
-    private String extractContent(OllamaChatResponse response, String imagePath) {
+    private String extractContent(OllamaChatResponse response) {
         if (response == null || response.message() == null || response.message().content() == null) {
             throw new MealAnalysisException("Ollama returned empty or malformed response");
         }
