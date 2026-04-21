@@ -2,6 +2,70 @@
 // Stratégie : squelette SPA inspiré v1, design visuel v2 intact
 // React hooks (useState, useEffect, useMemo, useRef) deja declares dans primitives.jsx
 
+// ─── Erreur API typée ────────────────────────────────────────────────────────
+// Extends Error pour respecter S3696 (throw Error-derived) tout en conservant
+// les proprietes {status, body} que tous les catch du fichier consomment.
+class ApiError extends Error {
+  constructor(status, body) {
+    super(typeof body === 'string' && body ? body : ('API error ' + status));
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// ─── Helpers streaming NDJSON (extraits de API.analyses.stream) ─────────────
+// openAnalysisStream : lance le POST streaming auth + body hint.
+// handleNdjsonMessage : dispatch un message {type, ...} parse.
+// consumeNdjsonStream : boucle reader.read() + parsing ligne par ligne.
+// Split pour alleger la complexite cognitive de stream() (SonarQube S3776).
+function openAnalysisStream(mealId, hint) {
+  const token = localStorage.getItem('itadaki.token');
+  return fetch('/api/analyses/stream/' + mealId, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(hint ? { hint } : {}),
+  });
+}
+
+function handleNdjsonMessage(msg, state, onToken) {
+  if (msg.type === 'token') onToken?.(msg.content);
+  else if (msg.type === 'complete') state.finalAnalysis = msg.analysis;
+  else if (msg.type === 'error') throw new ApiError(0, msg.message || 'stream error');
+}
+
+function processNdjsonLine(line, state, onToken) {
+  try {
+    const msg = JSON.parse(line);
+    handleNdjsonMessage(msg, state, onToken);
+  } catch (e) {
+    if (e && e.body) throw e; // vraie erreur metier propagee
+    // sinon ligne non-parsable, on ignore
+  }
+}
+
+async function consumeNdjsonStream(body, onToken) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const state = { finalAnalysis: null };
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) processNdjsonLine(line, state, onToken);
+    }
+  }
+  return state.finalAnalysis;
+}
+
 // ─── Wrapper fetch global ────────────────────────────────────────────────────
 const API = {
   async call(method, path, { body, isFormData } = {}) {
@@ -9,15 +73,23 @@ const API = {
     const headers = {};
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (!isFormData && body) headers['Content-Type'] = 'application/json';
+    let fetchBody;
+    if (isFormData) {
+      fetchBody = body;
+    } else if (body) {
+      fetchBody = JSON.stringify(body);
+    } else {
+      fetchBody = undefined;
+    }
     let res;
     try {
       res = await fetch(path, {
         method,
         headers,
-        body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+        body: fetchBody,
       });
     } catch (e) {
-      throw { status: 0, body: 'Erreur réseau : ' + e.message };
+      throw new ApiError(0, 'Erreur réseau : ' + e.message);
     }
     if (res.status === 401) {
       localStorage.removeItem('itadaki.token');
@@ -28,7 +100,7 @@ const API = {
     if (!res.ok) {
       let txt;
       try { txt = await res.text(); } catch { txt = ''; }
-      throw { status: res.status, body: txt };
+      throw new ApiError(res.status, txt);
     }
     if (res.status === 204) return null;
     return res.json();
@@ -62,44 +134,13 @@ const API = {
     // Le back emet {type:"token"|"complete"|"error"} par ligne.
     // Resout avec l'analyse finale, rejette si error event ou reseau KO.
     stream: async (mealId, hint, onToken) => {
-      const token = localStorage.getItem('itadaki.token');
-      const res = await fetch('/api/analyses/stream/' + mealId, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(hint ? { hint } : {}),
-      });
+      const res = await openAnalysisStream(mealId, hint);
       if (!res.ok) {
         let body = ''; try { body = await res.text(); } catch {}
-        throw { status: res.status, body };
+        throw new ApiError(res.status, body);
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finalAnalysis = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.type === 'token') onToken?.(msg.content);
-            else if (msg.type === 'complete') finalAnalysis = msg.analysis;
-            else if (msg.type === 'error') throw { body: msg.message || 'stream error' };
-          } catch (e) {
-            if (e && e.body) throw e; // vraie erreur metier propagee
-            // sinon ligne non-parsable, on ignore
-          }
-        }
-      }
-      if (!finalAnalysis) throw { body: 'Stream termine sans resultat' };
+      const finalAnalysis = await consumeNdjsonStream(res.body, onToken);
+      if (!finalAnalysis) throw new ApiError(0, 'Stream termine sans resultat');
       return finalAnalysis;
     },
   },
@@ -194,6 +235,37 @@ function buildLast7(dailyStats) {
 }
 
 // ─── Écran Auth câblé ─────────────────────────────────────────────────────────
+// Valide les champs du formulaire d'auth, renvoie {em?, un?, pw?}.
+// Extrait pour alleger la complexite cognitive de `go` (SonarQube S3776).
+function validateAuthForm(mode, em, un, pw) {
+  const errors = {};
+  if (!em || !em.includes('@')) errors.em = 'Email invalide';
+  if (mode === 'signup' && (!un || un.length < 3)) errors.un = 'Au moins 3 caractères';
+  if (!pw || pw.length < 6) errors.pw = '6 caractères minimum';
+  return errors;
+}
+
+// Traduit une erreur API d'auth en message FR lisible.
+// Extrait pour alleger la complexite cognitive de `go` (SonarQube S3776).
+function authErrorMessage(ex) {
+  if (ex.status === 409 || ex.status === 404) {
+    // 409 Conflict = email/username deja pris (depuis fix GlobalExceptionHandler)
+    // 404 = legacy (avant fix : Ahmed utilisait ResourceNotFoundException)
+    return 'Email ou nom d\'utilisateur déjà utilisé.';
+  }
+  if (ex.status === 400) {
+    // Validation Bean (password court, email invalide, username bad format)
+    let msg = 'Données invalides.';
+    try {
+      const parsed = JSON.parse(ex.body || '{}');
+      if (parsed.message) msg = parsed.message;
+    } catch { /* body pas JSON */ }
+    return msg;
+  }
+  if (ex.status === 401) return 'Email ou mot de passe incorrect.';
+  return 'Erreur serveur (' + ex.status + '). Réessayez.';
+}
+
 function AuthScreenWired({ T, onAuth, mobile }) {
   const [mode, setMode] = useState('signup');
   const [em, setEm] = useState('');
@@ -204,21 +276,15 @@ function AuthScreenWired({ T, onAuth, mobile }) {
   const [apiErr, setApiErr] = useState('');
 
   const go = async () => {
-    const e = {};
-    if (!em || !em.includes('@')) e.em = 'Email invalide';
-    if (mode === 'signup' && (!un || un.length < 3)) e.un = 'Au moins 3 caractères';
-    if (!pw || pw.length < 6) e.pw = '6 caractères minimum';
+    const e = validateAuthForm(mode, em, un, pw);
     setErr(e);
     if (Object.keys(e).length) return;
     setLd(true);
     setApiErr('');
     try {
-      let res;
-      if (mode === 'signup') {
-        res = await API.auth.register(un, em, pw);
-      } else {
-        res = await API.auth.login(em, pw);
-      }
+      const res = mode === 'signup'
+        ? await API.auth.register(un, em, pw)
+        : await API.auth.login(em, pw);
       // AuthResponseDto : { accessToken, tokenType, expiresIn, user: { id, username, email } }
       const token = res.accessToken || res.token;
       const user = res.user;
@@ -226,24 +292,7 @@ function AuthScreenWired({ T, onAuth, mobile }) {
       localStorage.setItem('itadaki.user', JSON.stringify(user));
       onAuth(user);
     } catch (ex) {
-      // 409 Conflict = email/username deja pris (depuis fix GlobalExceptionHandler)
-      // 404 = legacy (avant fix : Ahmed utilisait ResourceNotFoundException)
-      if (ex.status === 409 || ex.status === 404) {
-        setApiErr('Email ou nom d\'utilisateur déjà utilisé.');
-      } else if (ex.status === 400) {
-        // Validation Bean (password court, email invalide, username bad format)
-        // Le back renvoie un message specifique dans body
-        let msg = 'Données invalides.';
-        try {
-          const parsed = JSON.parse(ex.body || '{}');
-          if (parsed.message) msg = parsed.message;
-        } catch { /* body pas JSON */ }
-        setApiErr(msg);
-      } else if (ex.status === 401) {
-        setApiErr('Email ou mot de passe incorrect.');
-      } else {
-        setApiErr('Erreur serveur (' + ex.status + '). Réessayez.');
-      }
+      setApiErr(authErrorMessage(ex));
     } finally {
       setLd(false);
     }
@@ -307,7 +356,7 @@ function AuthScreenWired({ T, onAuth, mobile }) {
               icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" /><path d="M3 14c.7-2.5 2.8-3.5 5-3.5s4.3 1 5 3.5" stroke="currentColor" strokeWidth="1.4" /></svg>}
             />
           )}
-          <div onKeyDown={handleKey}>
+          <div role="group" aria-label="Mot de passe" onKeyDown={handleKey}>
             <Field T={T} label="Mot de passe" value={pw} onChange={setPw} type="password" placeholder="••••••••" error={err.pw} hint={mode === 'signup' ? '6 caractères minimum' : undefined}
               icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4" /><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.4" /></svg>}
             />
@@ -317,11 +366,16 @@ function AuthScreenWired({ T, onAuth, mobile }) {
               {apiErr}
             </div>
           )}
-          <div style={{ marginTop: 8 }}>
-            <Btn T={T} block onClick={go} disabled={ld} size="lg">
-              {ld ? <><Spin size={14} /> Un instant…</> : (mode === 'signup' ? 'Créer mon compte' : 'Se connecter')}
-            </Btn>
-          </div>
+          {(() => {
+            const submitLabel = mode === 'signup' ? 'Créer mon compte' : 'Se connecter';
+            return (
+              <div style={{ marginTop: 8 }}>
+                <Btn T={T} block onClick={go} disabled={ld} size="lg">
+                  {ld ? <><Spin size={14} /> Un instant…</> : submitLabel}
+                </Btn>
+              </div>
+            );
+          })()}
           <div style={{ textAlign: 'center', fontSize: 11, color: T.inkFaint, marginTop: 18, fontFamily: 'Inter,system-ui', lineHeight: 1.5 }}>
             En continuant vous acceptez nos <span style={{ textDecoration: 'underline', color: T.inkMuted }}>conditions</span>. Les estimations ne sont pas des valeurs médicales.
           </div>
@@ -332,6 +386,17 @@ function AuthScreenWired({ T, onAuth, mobile }) {
 }
 
 // ─── Dashboard câblé ─────────────────────────────────────────────────────────
+// Extrait au niveau module pour eviter un 5e niveau de fonction imbriquee
+// dans le useEffect de DashboardWired (cf. SonarQube S2004).
+function fetchLast7DaysStats() {
+  const today = new Date();
+  const from = new Date(today); from.setDate(from.getDate() - 6);
+  return API.stats.daily(
+    from.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10)
+  ).catch(() => []);
+}
+
 function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
   const [meals, setMeals] = useState([]);
   const [days, setDays] = useState(() => buildLast7(null));
@@ -345,14 +410,7 @@ function DashboardWired({ T, user, onUpload, onHistory, onMeal, mobile }) {
       try {
         const [histPage, dailyData, overviewData, streakData] = await Promise.all([
           API.history.list(0, 20).catch(() => ({ content: [] })),
-          (async () => {
-            const today = new Date();
-            const from = new Date(today); from.setDate(from.getDate() - 6);
-            return API.stats.daily(
-              from.toISOString().slice(0, 10),
-              today.toISOString().slice(0, 10)
-            ).catch(() => []);
-          })(),
+          fetchLast7DaysStats(),
           API.stats.overview().catch(() => null),
           API.stats.streak().catch(() => null),
         ]);
@@ -400,6 +458,209 @@ async function resizeForUpload(file, maxSide = 1280, quality = 0.85) {
   return new File([blob], newName, { type: 'image/jpeg' });
 }
 
+// ─── Helpers Upload/Analyse (extraits pour alleger UploadWired — S3776) ─────
+// Phase du stepper d'analyse (observation / identification / calcul).
+function progToPhase(prog) {
+  if (prog < 33) return 0;
+  if (prog < 66) return 1;
+  return 2;
+}
+
+// Polling fallback si le streaming NDJSON echoue (ngrok buffer, CORS…).
+// Fait un POST fire-and-forget puis interroge GET /api/analyses/:mealId
+// toutes les 2s jusqu'a 5 min, ou jusqu'a erreur non-transiente.
+async function pollForAnalysis(mealId, setProg) {
+  let postErr = null;
+  API.analyses.analyze(mealId).catch(e => { postErr = e; });
+  for (let i = 0; i < 150; i++) { // 150 * 2s = 5 min max
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await API.analyses.get(mealId);
+      if (r && r.id) return r;
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+    if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+      throw postErr;
+    }
+    setProg(30 + Math.min(65, i));
+  }
+  throw new ApiError(504, 'Analyse trop longue (>5 min). Reessayez.');
+}
+
+// Convertit la reponse backend en objet "meal" utilise par l'ecran correction.
+function buildAnalysedMeal(analysisRes, mealId, img) {
+  const mtNow = detectMealType();
+  return {
+    id: 'new-' + mealId,
+    serverId: mealId,
+    name: analysisRes.detectedDishName || 'Repas analyse',
+    ing: (analysisRes.detectedItems || []).map(i => i.name || String(i)),
+    portion: 'moyen',
+    ...kcalRange(analysisRes.estimatedTotalCalories || 500),
+    conf: Math.round((analysisRes.confidenceScore || 0.8) * 100),
+    date: analysisRes.analyzedAt || new Date().toISOString(),
+    mealType: mtNow,
+    meal: MEAL_TYPE_LABELS[mtNow],
+    seed: mealId % 99 + 1,
+    img,
+    mealId,
+    analysisRaw: analysisRes,
+  };
+}
+
+// Rendu d'une ligne du stepper 3 phases (observation / identification / calcul).
+// Extrait de UploadWired pour reduire la complexite cognitive (S3776).
+function AnalysisPhaseRow({ T, phaseDef, idx, currentPhase, visibleIngredients, fakeIngredients, fakeCalories }) {
+  const active = idx === currentPhase;
+  const done = idx < currentPhase;
+  let iconBg;
+  if (active) iconBg = phaseDef.color;
+  else if (done) iconBg = T.matcha + '40';
+  else iconBg = T.hairline;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '10px 14px', borderRadius: 14,
+      background: active ? T.bgAlt : 'transparent',
+      border: active ? `1px solid ${phaseDef.color}30` : '1px solid transparent',
+      opacity: done ? 0.55 : 1,
+      transition: 'all .4s ease',
+    }}>
+      <div style={{
+        flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
+        background: iconBg,
+        color: active || done ? '#fff' : T.inkFaint,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 16, transition: 'background .3s',
+      }}>{done ? '✓' : phaseDef.icon}</div>
+      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+        <div style={{
+          fontFamily: 'Inter,system-ui', fontSize: 13, fontWeight: 600,
+          color: active ? T.ink : T.inkMuted,
+        }}>{phaseDef.title}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono,monospace', fontSize: 10.5,
+          color: T.inkFaint, marginTop: 2,
+          textTransform: 'uppercase', letterSpacing: '.08em',
+        }}>{phaseDef.detail}</div>
+        {active && idx === 1 && visibleIngredients > 0 &&
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {fakeIngredients.slice(0, visibleIngredients).map((ing, i) =>
+              <span key={i} style={{
+                fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
+                background: phaseDef.color + '20', color: phaseDef.color, fontWeight: 500,
+                animation: 'fadein .35s ease',
+              }}>{ing}</span>
+            )}
+          </div>
+        }
+        {active && idx === 2 &&
+          <div style={{
+            marginTop: 6, fontFamily: 'JetBrains Mono,monospace',
+            fontSize: 18, fontWeight: 600, color: phaseDef.color,
+            animation: 'slotPulse .3s ease-in-out infinite',
+          }}>~ {fakeCalories} kcal</div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// Ecran plein-ecran affiche pendant l'analyse IA (~5-60s).
+// Extrait de UploadWired pour alleger sa complexite cognitive (S3776).
+function AnalysisLoadingView({ T, img, prog, liveTokens, mobile }) {
+  const phase = progToPhase(prog);
+  const hasImg = img && img !== 'PLACEHOLDER';
+  const fakeIngredients = ['légumes verts', 'protéines animales', 'féculents', 'matières grasses', 'épices', 'sauce'];
+  const visibleIngredients = Math.min(fakeIngredients.length, Math.max(0, Math.floor((prog - 33) / 5)));
+  const fakeCalories = 180 + ((Math.floor(prog * 7) * 37) % 820);
+  const phases = [
+    { icon: '🧠', title: 'Qwen observe l\'image…', detail: 'Décodage visuel multimodal', color: T.accent },
+    { icon: '🔍', title: 'Identification des ingrédients…', detail: 'Segmentation et reconnaissance', color: '#7fa644' },
+    { icon: '🧮', title: 'Calcul des apports nutritionnels…', detail: 'Agrégation calories + macros', color: '#d4a13c' },
+  ];
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: T.bg, color: T.ink, textAlign: 'center' }}>
+      <style>{`
+        @keyframes scanline { 0%{top:0;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:100%;opacity:0} }
+        @keyframes fadein   { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slotPulse{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1px)} }
+      `}</style>
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+        {/* Image + anneau + scan line (phase 1) + % central */}
+        <div style={{ position: 'relative', width: mobile ? 200 : 240, height: mobile ? 200 : 240 }}>
+          <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', overflow: 'hidden' }}>
+            {hasImg
+              ? <img src={img} alt="repas en cours d'analyse" style={{
+                  width: '100%', height: '100%', objectFit: 'cover',
+                  filter: 'blur(3px) brightness(0.92)', transition: 'filter .6s ease',
+                }} />
+              : <Dish seed={13} style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
+            }
+            {phase === 0 && <div style={{
+              position: 'absolute', left: 0, right: 0, height: 4,
+              background: 'linear-gradient(90deg, transparent, ' + T.accent + ', transparent)',
+              boxShadow: '0 0 16px ' + T.accent,
+              animation: 'scanline 1.8s linear infinite',
+            }} />}
+          </div>
+          <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ position: 'absolute', inset: 0, animation: 'spin 3s linear infinite' }}>
+            <circle cx="110" cy="110" r="104" fill="none" stroke={phases[phase].color} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,.96)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.25)' }}>
+              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 15, color: T.ink, fontWeight: 600 }}>{Math.round(prog)}%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stepper 3 phases */}
+        <div style={{ width: mobile ? 300 : 380, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {phases.map((p, i) => (
+            <AnalysisPhaseRow key={i} T={T} phaseDef={p} idx={i} currentPhase={phase}
+              visibleIngredients={visibleIngredients} fakeIngredients={fakeIngredients} fakeCalories={fakeCalories} />
+          ))}
+          <div style={{ height: 4, background: T.hairline, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+            <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
+          </div>
+        </div>
+
+        {liveTokens && (
+          <div style={{
+            width: mobile ? 300 : 380,
+            padding: '12px 14px',
+            background: '#0f0f10',
+            border: '1px solid #26262a',
+            borderRadius: 14,
+            fontFamily: 'JetBrains Mono,monospace',
+            textAlign: 'left',
+            maxHeight: 120,
+            overflow: 'hidden',
+            position: 'relative',
+          }}>
+            <style>{'@keyframes blink { 50% { opacity: 0; } }'}</style>
+            <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.14em', color: '#6b7280', marginBottom: 6 }}>
+              qwen2.5vl · pensée en direct
+            </div>
+            <div style={{ fontSize: 10.5, color: '#e5e7eb', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.45 }}>
+              {liveTokens.length > 240 ? '…' + liveTokens.slice(-240) : liveTokens}
+              <span style={{ color: T.accent, animation: 'blink 1s step-end infinite' }}>▋</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 18 : 22, letterSpacing: '-.02em', marginTop: 24, fontStyle: 'italic', fontWeight: 500, color: T.inkMuted }}>{phases[phase].title.replace(/…$/, '')}</div>
+      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkFaint, marginTop: 6, maxWidth: 360, lineHeight: 1.5 }}>
+        Le modèle qwen2.5vl:7b raisonne localement — quelques secondes patience.
+      </div>
+    </div>
+  );
+}
+
 // ─── Upload câblé ─────────────────────────────────────────────────────────────
 function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   const [stage, setStage] = useState('idle');
@@ -420,6 +681,15 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     r.readAsDataURL(f);
   };
 
+  const runStream = async (mealId) => {
+    let acc = '';
+    return API.analyses.stream(mealId, null, (token) => {
+      acc += token;
+      setLiveTokens(acc);
+      setProg(20 + Math.min(75, Math.floor(acc.length / 7)));
+    });
+  };
+
   const analyze = async () => {
     setStage('loading');
     setProg(10);
@@ -427,66 +697,21 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
     setLiveTokens('');
     try {
       // Etape 0 — resize + compress pour reduire le payload (photos smartphone 16-30Mo).
-      // Qwen2.5-VL accepte 1280px large largement. JPEG 0.85 => ~300-600Ko.
       const compressed = await resizeForUpload(file);
-
       // Etape 1 — upload image (compressee)
       const uploadRes = await API.meals.upload(compressed);
       const mealId = uploadRes.mealId;
       setProg(20);
-
-      // Etape 2 — streaming : les tokens qwen2.5vl arrivent en direct via NDJSON.
-      // Progression basee sur la longueur du JSON typique (~500 chars).
-      // En cas de KO stream (ngrok buffer, CORS, etc.), fallback polling.
-      let analysisRes = null;
+      // Etape 2 — streaming NDJSON, fallback polling si KO stream.
+      let analysisRes;
       try {
-        let acc = '';
-        analysisRes = await API.analyses.stream(mealId, null, (token) => {
-          acc += token;
-          setLiveTokens(acc);
-          setProg(20 + Math.min(75, Math.floor(acc.length / 7)));
-        });
+        analysisRes = await runStream(mealId);
       } catch (streamErr) {
         console.warn('Stream fail, fallback polling:', streamErr);
-        // Fallback : l'ancien flow fire-and-forget + polling
-        let postErr = null;
-        API.analyses.analyze(mealId).catch(e => { postErr = e; });
-        for (let i = 0; i < 150; i++) {
-          await new Promise(r => setTimeout(r, 2000));
-          try {
-            const r = await API.analyses.get(mealId);
-            if (r && r.id) { analysisRes = r; break; }
-          } catch (e) {
-            if (e.status !== 404) throw e;
-          }
-          if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
-            throw postErr;
-          }
-          setProg(30 + Math.min(65, i));
-        }
-        if (!analysisRes) throw { status: 504, body: 'Analyse trop longue (>5 min). Reessayez.' };
+        analysisRes = await pollForAnalysis(mealId, setProg);
       }
       setProg(100);
-
-      // Convertit en shape v2. mealType auto-detecte par heure (fallback
-      // si le back n'a pas renvoye la valeur persistee).
-      const mtNow = detectMealType();
-      const pseudo = {
-        id: 'new-' + mealId,
-        serverId: mealId,
-        name: analysisRes.detectedDishName || 'Repas analyse',
-        ing: (analysisRes.detectedItems || []).map(i => i.name || String(i)),
-        portion: 'moyen',
-        ...kcalRange(analysisRes.estimatedTotalCalories || 500),
-        conf: Math.round((analysisRes.confidenceScore || 0.8) * 100),
-        date: analysisRes.analyzedAt || new Date().toISOString(),
-        mealType: mtNow,
-        meal: MEAL_TYPE_LABELS[mtNow],
-        seed: mealId % 99 + 1,
-        img,
-        mealId,
-        analysisRaw: analysisRes,
-      };
+      const pseudo = buildAnalysedMeal(analysisRes, mealId, img);
       setTimeout(() => onAnalyzed(pseudo), 300);
     } catch (e) {
       setApiErr('Erreur lors de l\'analyse : ' + (e.body || e.message || 'serveur indisponible'));
@@ -496,151 +721,7 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
   };
 
   if (stage === 'loading') {
-    // Stepper "Qwen pense..." : 3 phases pedagogiques qui rendent le raisonnement IA visible
-    // Phase 1 (0-33%)  : observation -> scan line qui balaye l'image floutee
-    // Phase 2 (33-66%) : identification -> ingredients plausibles s'affichent un par un
-    // Phase 3 (66-100%): calcul -> chiffre kcal qui defile type slot machine
-    const phase = prog < 33 ? 0 : prog < 66 ? 1 : 2;
-    const hasImg = img && img !== 'PLACEHOLDER';
-    const fakeIngredients = ['légumes verts', 'protéines animales', 'féculents', 'matières grasses', 'épices', 'sauce'];
-    const visibleIngredients = Math.min(fakeIngredients.length, Math.max(0, Math.floor((prog - 33) / 5)));
-    const fakeCalories = 180 + ((Math.floor(prog * 7) * 37) % 820);
-
-    const phases = [
-      { icon: '🧠', title: 'Qwen observe l\'image…', detail: 'Décodage visuel multimodal', color: T.accent },
-      { icon: '🔍', title: 'Identification des ingrédients…', detail: 'Segmentation et reconnaissance', color: '#7fa644' },
-      { icon: '🧮', title: 'Calcul des apports nutritionnels…', detail: 'Agrégation calories + macros', color: '#d4a13c' },
-    ];
-
-    return (
-      <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: T.bg, color: T.ink, textAlign: 'center' }}>
-        <style>{`
-          @keyframes scanline { 0%{top:0;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:100%;opacity:0} }
-          @keyframes fadein   { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-          @keyframes slotPulse{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-1px)} }
-        `}</style>
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
-          {/* Image + anneau + scan line (phase 1) + % central */}
-          <div style={{ position: 'relative', width: mobile ? 200 : 240, height: mobile ? 200 : 240 }}>
-            <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', overflow: 'hidden' }}>
-              {hasImg
-                ? <img src={img} alt="repas en cours d'analyse" style={{
-                    width: '100%', height: '100%', objectFit: 'cover',
-                    filter: 'blur(3px) brightness(0.92)', transition: 'filter .6s ease',
-                  }} />
-                : <Dish seed={13} style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
-              }
-              {/* Scan line — visible en phase 1 uniquement */}
-              {phase === 0 && <div style={{
-                position: 'absolute', left: 0, right: 0, height: 4,
-                background: 'linear-gradient(90deg, transparent, ' + T.accent + ', transparent)',
-                boxShadow: '0 0 16px ' + T.accent,
-                animation: 'scanline 1.8s linear infinite',
-              }} />}
-            </div>
-            <svg width="100%" height="100%" viewBox="0 0 220 220" style={{ position: 'absolute', inset: 0, animation: 'spin 3s linear infinite' }}>
-              <circle cx="110" cy="110" r="104" fill="none" stroke={phases[phase].color} strokeWidth="3" strokeDasharray="10 14" strokeLinecap="round" />
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,.96)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.25)' }}>
-                <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 15, color: T.ink, fontWeight: 600 }}>{Math.round(prog)}%</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stepper 3 phases */}
-          <div style={{ width: mobile ? 300 : 380, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {phases.map((p, i) => {
-              const active = i === phase;
-              const done = i < phase;
-              return (
-                <div key={p.title} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 12,
-                  padding: '10px 14px', borderRadius: 14,
-                  background: active ? T.bgAlt : 'transparent',
-                  border: active ? `1px solid ${p.color}30` : '1px solid transparent',
-                  opacity: done ? 0.55 : 1,
-                  transition: 'all .4s ease',
-                }}>
-                  <div style={{
-                    flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
-                    background: active ? p.color : (done ? T.matcha + '40' : T.hairline),
-                    color: active || done ? '#fff' : T.inkFaint,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, transition: 'background .3s',
-                  }}>{done ? '✓' : p.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                    <div style={{
-                      fontFamily: 'Inter,system-ui', fontSize: 13, fontWeight: 600,
-                      color: active ? T.ink : T.inkMuted,
-                    }}>{p.title}</div>
-                    <div style={{
-                      fontFamily: 'JetBrains Mono,monospace', fontSize: 10.5,
-                      color: T.inkFaint, marginTop: 2,
-                      textTransform: 'uppercase', letterSpacing: '.08em',
-                    }}>{p.detail}</div>
-
-                    {/* Détail dynamique selon phase active */}
-                    {active && i === 1 && visibleIngredients > 0 &&
-                      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {fakeIngredients.slice(0, visibleIngredients).map((ing, idx) =>
-                          <span key={`${ing}-${idx}`} style={{
-                            fontSize: 10.5, padding: '2px 8px', borderRadius: 999,
-                            background: p.color + '20', color: p.color, fontWeight: 500,
-                            animation: 'fadein .35s ease',
-                          }}>{ing}</span>
-                        )}
-                      </div>
-                    }
-                    {active && i === 2 &&
-                      <div style={{
-                        marginTop: 6, fontFamily: 'JetBrains Mono,monospace',
-                        fontSize: 18, fontWeight: 600, color: p.color,
-                        animation: 'slotPulse .3s ease-in-out infinite',
-                      }}>~ {fakeCalories} kcal</div>
-                    }
-                  </div>
-                </div>
-              );
-            })}
-            <div style={{ height: 4, background: T.hairline, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
-              <div style={{ width: prog + '%', height: '100%', background: 'linear-gradient(90deg,' + T.accent + ',' + T.matcha + ')', transition: 'width .4s' }} />
-            </div>
-          </div>
-
-          {/* Brain dump : tokens qwen streames en direct via NDJSON */}
-          {liveTokens && (
-            <div style={{
-              width: mobile ? 300 : 380,
-              padding: '12px 14px',
-              background: '#0f0f10',
-              border: '1px solid #26262a',
-              borderRadius: 14,
-              fontFamily: 'JetBrains Mono,monospace',
-              textAlign: 'left',
-              maxHeight: 120,
-              overflow: 'hidden',
-              position: 'relative',
-            }}>
-              <style>{'@keyframes blink { 50% { opacity: 0; } }'}</style>
-              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.14em', color: '#6b7280', marginBottom: 6 }}>
-                qwen2.5vl · pensée en direct
-              </div>
-              <div style={{ fontSize: 10.5, color: '#e5e7eb', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.45 }}>
-                {liveTokens.length > 240 ? '…' + liveTokens.slice(-240) : liveTokens}
-                <span style={{ color: T.accent, animation: 'blink 1s step-end infinite' }}>▋</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 18 : 22, letterSpacing: '-.02em', marginTop: 24, fontStyle: 'italic', fontWeight: 500, color: T.inkMuted }}>{phases[phase].title.replace(/…$/, '')}</div>
-        <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkFaint, marginTop: 6, maxWidth: 360, lineHeight: 1.5 }}>
-          Le modèle qwen2.5vl:7b raisonne localement — quelques secondes patience.
-        </div>
-      </div>
-    );
+    return <AnalysisLoadingView T={T} img={img} prog={prog} liveTokens={liveTokens} mobile={mobile} />;
   }
 
   return (
@@ -669,10 +750,14 @@ function UploadWired({ T, onCancel, onAnalyzed, mobile }) {
       {stage === 'idle' && (
         <>
           <div
+            role="button"
+            tabIndex={0}
+            aria-label="Deposer ou parcourir une photo"
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
             onClick={() => fileRef.current.click()}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current.click(); } }}
             style={{ border: '2px dashed ' + (drag ? T.accent : T.hairline), borderRadius: 24, padding: mobile ? '34px 18px' : '52px 28px', textAlign: 'center', background: drag ? T.accentSoft : T.bgAlt, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}>
             <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: .4, pointerEvents: 'none' }}>
               <path d="M0,130 Q150,80 300,120 Q450,160 600,100 L600,200 L0,200 Z" fill={T.matchaSoft} />
@@ -718,6 +803,47 @@ function detectMealType(dateStrOrNow) {
   return 'DINNER';
 }
 
+// Fingerprint d'une analyse (nom + items + kcal) pour detecter un UPSERT Hibernate
+// silencieux (analyzedAt n'est pas fiable apres une 2e passe).
+function analysisSnapshot(r) {
+  return JSON.stringify([
+    r?.detectedDishName || '',
+    (r?.detectedItems || []).map(i => i.name || '').join('|'),
+    r?.estimatedTotalCalories || 0,
+  ]);
+}
+
+// Polling de la 2e passe LLM : attend que le snapshot change.
+// Extrait de doReanalyze pour alleger la complexite cognitive (S3776).
+async function pollForReanalysis(mealId, oldSnap, postErrRef) {
+  for (let i = 0; i < 150; i++) { // 150 * 2s = 5 min max
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await API.analyses.get(mealId);
+      if (r && r.id && analysisSnapshot(r) !== oldSnap) return r;
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+    const postErr = postErrRef.current;
+    if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
+      throw postErr;
+    }
+  }
+  return null;
+}
+
+// Applique une nouvelle analyse sur un meal existant (name/ing/kcal/conf).
+function mergeAnalysisIntoMeal(meal, res) {
+  return {
+    ...meal,
+    name: res.detectedDishName || meal.name,
+    ing: (res.detectedItems || []).map(i => i.name || String(i)),
+    ...kcalRange(res.estimatedTotalCalories || 0),
+    conf: Math.round((res.confidenceScore || 0.8) * 100),
+    analysisRaw: res,
+  };
+}
+
 function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [hint, setHint] = useState('');
   const [ld, setLd] = useState(false);
@@ -748,6 +874,7 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
     try {
       await API.meals.setType(mealId, newType);
     } catch (e) {
+      console.warn('setType failed', e);
       setMealType(prev);
       setTypeErr('Impossible de mettre à jour le type.');
     }
@@ -760,49 +887,17 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
     setLd(true);
     setApiErr('');
     try {
-      // Fire-and-forget + polling : compare le contenu (nom + items + kcal) pour detecter
-      // la mise a jour, car analyzedAt n'est pas fiable sur un UPSERT Hibernate.
-      const snapshot = (r) => JSON.stringify([
-        r?.detectedDishName || '',
-        (r?.detectedItems || []).map(i => i.name || '').join('|'),
-        r?.estimatedTotalCalories || 0,
-      ]);
-      const oldSnap = snapshot((reanalyzed || meal).analysisRaw);
-      let postErr = null;
+      const oldSnap = analysisSnapshot((reanalyzed || meal).analysisRaw);
+      const postErrRef = { current: null };
       const postPromise = API.analyses.reanalyze(mealId, hint.trim())
-        .catch(e => { postErr = e; return null; });
+        .catch(e => { postErrRef.current = e; return null; });
 
-      let res = null;
-      for (let i = 0; i < 150; i++) { // 150 * 2s = 5 min max
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const r = await API.analyses.get(mealId);
-          if (r && r.id && snapshot(r) !== oldSnap) {
-            res = r;
-            break;
-          }
-        } catch (e) {
-          if (e.status !== 404) throw e;
-        }
-        if (postErr && postErr.status && postErr.status !== 0 && postErr.status !== 504) {
-          throw postErr;
-        }
-      }
+      let res = await pollForReanalysis(mealId, oldSnap, postErrRef);
       // Fallback : si le polling n'a pas distingue la nouvelle, attend le POST
-      if (!res) {
-        res = await postPromise;
-      }
-      if (!res) throw { status: 504, body: '2e passe trop longue (>5 min)' };
+      if (!res) res = await postPromise;
+      if (!res) throw new ApiError(504, '2e passe trop longue (>5 min)');
 
-      const updated = {
-        ...meal,
-        name: res.detectedDishName || meal.name,
-        ing: (res.detectedItems || []).map(i => i.name || String(i)),
-        ...kcalRange(res.estimatedTotalCalories || 0),
-        conf: Math.round((res.confidenceScore || 0.8) * 100),
-        analysisRaw: res,
-      };
-      setReanalyzed(updated);
+      setReanalyzed(mergeAnalysisIntoMeal(meal, res));
     } catch (e) {
       setApiErr('Erreur lors de la 2ᵉ passe : ' + (e.body || e.message || 'serveur indisponible'));
     } finally {
@@ -961,9 +1056,14 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
               <Btn T={T} variant="soft" onClick={doReanalyze} disabled={ld || !hint.trim()}>
                 {ld ? <><Spin size={13} color={T.accentDeep} /> 2ᵉ passe en cours…</> : 'Relancer l\'analyse'}
               </Btn>
-              <Btn T={T} variant="ghost" onClick={saveCorrection} disabled={corrLd || !!savedCorrection}>
-                {corrLd ? <><Spin size={13} /> Enregistrement…</> : (savedCorrection ? 'Correction enregistrée ✓' : 'Enregistrer ma correction')}
-              </Btn>
+              {(() => {
+                const saveLabel = savedCorrection ? 'Correction enregistrée ✓' : 'Enregistrer ma correction';
+                return (
+                  <Btn T={T} variant="ghost" onClick={saveCorrection} disabled={corrLd || !!savedCorrection}>
+                    {corrLd ? <><Spin size={13} /> Enregistrement…</> : saveLabel}
+                  </Btn>
+                );
+              })()}
             </div>
             {corrMsg && (
               <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, marginTop: 8, color: savedCorrection ? T.accentDeep : T.danger }}>
@@ -1047,7 +1147,8 @@ function HistoryWired({ T, onMeal, mobile }) {
   const groups = {};
   filtered.forEach(m => {
     const k = (m.date || '').slice(0, 10);
-    (groups[k] = groups[k] || []).push(m);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(m);
   });
   const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
@@ -1075,11 +1176,12 @@ function HistoryWired({ T, onMeal, mobile }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label htmlFor="history-date-filter" style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2 6h12M5.5 2v2M10.5 2v2" stroke="currentColor" strokeWidth="1.4"/></svg>
           Filtrer par date
         </label>
         <input
+          id="history-date-filter"
           type="date"
           value={dateFilter}
           onChange={e => setDateFilter(e.target.value)}
@@ -1233,7 +1335,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
           {statCard('Utilisateurs', stats.totalUsers)}
           {statCard('Repas', stats.totalMeals)}
           {statCard('Analyses IA', stats.totalAnalyses)}
-          {statCard('Kcal moy. / analyse', stats.avgCaloriesPerMeal != null ? Math.round(stats.avgCaloriesPerMeal) : '—', 'kcal')}
+          {statCard('Kcal moy. / analyse', stats.avgCaloriesPerMeal == null ? '—' : Math.round(stats.avgCaloriesPerMeal), 'kcal')}
         </div>
       )}
 
@@ -1281,7 +1383,7 @@ function AdminPageWired({ T, currentUser, mobile }) {
               <div style={{ flex: '1 1 160px', fontFamily: 'Inter,system-ui', fontSize: 13, color: T.ink, fontWeight: 500 }}>{m.userName || 'inconnu'}</div>
               <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: T.bgAlt, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{m.mealType || '—'}</div>
               <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: m.status === 'ANALYSED' ? T.matchaSoft : T.bgAlt, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{m.status}</div>
-              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkMuted }}>{m.calories != null ? Math.round(m.calories) + ' kcal' : '—'}</div>
+              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkMuted }}>{m.calories == null ? '—' : Math.round(m.calories) + ' kcal'}</div>
               <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, color: T.inkFaint }}>{m.uploadedAt ? new Date(m.uploadedAt).toLocaleDateString('fr-FR') : ''}</div>
               <Btn T={T} variant="ghost" onClick={() => deleteMeal(m)}>Supprimer</Btn>
             </div>
@@ -1372,22 +1474,34 @@ function CoachFab({ T, mobile }) {
       )}
 
       {open && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 300,
-          background: 'rgba(20,14,8,0.55)',
-          display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center',
-          padding: mobile ? 0 : 24,
-          animation: 'fadeIn .25s ease',
-        }} onClick={close}>
-          <style>{'@keyframes fadeIn {from{opacity:0}to{opacity:1}} @keyframes slideUp {from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}'}</style>
-          <div onClick={e => e.stopPropagation()} style={{
-            width: mobile ? '100%' : 520, maxHeight: mobile ? '88vh' : '80vh',
-            background: T.bg, color: T.ink,
-            borderRadius: mobile ? '22px 22px 0 0' : 24,
-            boxShadow: '0 40px 80px -20px rgba(80,40,10,.45)',
-            overflow: 'hidden', display: 'flex', flexDirection: 'column',
-            animation: 'slideUp .3s ease',
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Fermer le coach"
+          onClick={close}
+          onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); close(); } }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(20,14,8,0.55)',
+            display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center',
+            padding: mobile ? 0 : 24,
+            animation: 'fadeIn .25s ease',
           }}>
+          <style>{'@keyframes fadeIn {from{opacity:0}to{opacity:1}} @keyframes slideUp {from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}'}</style>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Coach IA"
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => e.stopPropagation()}
+            style={{
+              width: mobile ? '100%' : 520, maxHeight: mobile ? '88vh' : '80vh',
+              background: T.bg, color: T.ink,
+              borderRadius: mobile ? '22px 22px 0 0' : 24,
+              boxShadow: '0 40px 80px -20px rgba(80,40,10,.45)',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+              animation: 'slideUp .3s ease',
+            }}>
             <div style={{ padding: '18px 22px', borderBottom: '1px solid ' + T.hairline, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 12, background: 'linear-gradient(135deg,' + T.accent + ',' + T.matcha + ')', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1502,6 +1616,64 @@ function CoachFab({ T, mobile }) {
 }
 
 // ─── App principale — Router SPA ──────────────────────────────────────────────
+// Resolution du contenu d'ecran du router SPA — extraite de App pour alleger
+// sa complexite cognitive (SonarQube S3776). Renvoie `null` si aucun ecran
+// ne correspond, auquel cas App fait un fallback setScreen('dashboard').
+function renderScreenContent(ctx) {
+  const { effectiveScreen, T, user, isMobile, currentMeal, dark, setDark, setScreen,
+    onAuth, onAnalyzed, onSaved, onLogout, openMealFromServer } = ctx;
+  if (effectiveScreen === 'auth') {
+    return <AuthScreenWired T={T} onAuth={onAuth} mobile={isMobile} />;
+  }
+  if (effectiveScreen === 'dashboard') {
+    return (
+      <Shell T={T} mobile={isMobile} active="dashboard" onNav={id => setScreen(id)} user={user}>
+        <DashboardWired T={T} user={user} onUpload={() => setScreen('upload')} onHistory={() => setScreen('history')} onMeal={openMealFromServer} mobile={isMobile} />
+      </Shell>
+    );
+  }
+  if (effectiveScreen === 'upload') {
+    return (
+      <Shell T={T} mobile={isMobile} active="upload" onNav={id => setScreen(id)} user={user} pad={false}>
+        <div style={{ padding: isMobile ? '16px 18px' : '28px 40px', overflowY: 'auto', height: '100%' }}>
+          <UploadWired T={T} onCancel={() => setScreen('dashboard')} onAnalyzed={onAnalyzed} mobile={isMobile} />
+        </div>
+      </Shell>
+    );
+  }
+  if (effectiveScreen === 'correction' && currentMeal) {
+    return (
+      <Shell T={T} mobile={isMobile} active="upload" onNav={id => setScreen(id)} user={user} pad={false}>
+        <div style={{ padding: isMobile ? '16px 18px' : '28px 40px', overflowY: 'auto', height: '100%' }}>
+          <CorrectionWired T={T} meal={currentMeal} onSave={onSaved} onCancel={() => setScreen('dashboard')} mobile={isMobile} />
+        </div>
+      </Shell>
+    );
+  }
+  if (effectiveScreen === 'history') {
+    return (
+      <Shell T={T} mobile={isMobile} active="history" onNav={id => setScreen(id)} user={user}>
+        <HistoryWired T={T} onMeal={openMealFromServer} mobile={isMobile} />
+      </Shell>
+    );
+  }
+  if (effectiveScreen === 'profile') {
+    return (
+      <Shell T={T} mobile={isMobile} active="profile" onNav={id => setScreen(id)} user={user}>
+        <ProfileWired T={T} user={user} onLogout={onLogout} mobile={isMobile} dark={dark} setDark={setDark} />
+      </Shell>
+    );
+  }
+  if (effectiveScreen === 'admin' && user && user.role === 'ADMIN') {
+    return (
+      <Shell T={T} mobile={isMobile} active="admin" onNav={id => setScreen(id)} user={user}>
+        <AdminPageWired T={T} currentUser={user} mobile={isMobile} />
+      </Shell>
+    );
+  }
+  return null;
+}
+
 function App() {
   const [dark, setDark] = useState(() => {
     try { return JSON.parse(localStorage.getItem('itadaki.dark')) ?? false; } catch { return false; }
@@ -1589,54 +1761,11 @@ function App() {
   // Si non connecté, forcer auth
   const effectiveScreen = (!user && screen !== 'auth') ? 'auth' : screen;
 
-  let content;
-  if (effectiveScreen === 'auth') {
-    content = <AuthScreenWired T={T} onAuth={onAuth} mobile={isMobile} />;
-  } else if (effectiveScreen === 'dashboard') {
-    content = (
-      <Shell T={T} mobile={isMobile} active="dashboard" onNav={id => setScreen(id)} user={user}>
-        <DashboardWired T={T} user={user} onUpload={() => setScreen('upload')} onHistory={() => setScreen('history')} onMeal={openMealFromServer} mobile={isMobile} />
-      </Shell>
-    );
-  } else if (effectiveScreen === 'upload') {
-    content = (
-      <Shell T={T} mobile={isMobile} active="upload" onNav={id => setScreen(id)} user={user} pad={false}>
-        <div style={{ padding: isMobile ? '16px 18px' : '28px 40px', overflowY: 'auto', height: '100%' }}>
-          <UploadWired T={T} onCancel={() => setScreen('dashboard')} onAnalyzed={onAnalyzed} mobile={isMobile} />
-        </div>
-      </Shell>
-    );
-  } else if (effectiveScreen === 'correction' && currentMeal) {
-    content = (
-      <Shell T={T} mobile={isMobile} active="upload" onNav={id => setScreen(id)} user={user} pad={false}>
-        <div style={{ padding: isMobile ? '16px 18px' : '28px 40px', overflowY: 'auto', height: '100%' }}>
-          <CorrectionWired T={T} meal={currentMeal} onSave={onSaved} onCancel={() => setScreen('dashboard')} mobile={isMobile} />
-        </div>
-      </Shell>
-    );
-  } else if (effectiveScreen === 'history') {
-    content = (
-      <Shell T={T} mobile={isMobile} active="history" onNav={id => setScreen(id)} user={user}>
-        <HistoryWired T={T} onMeal={openMealFromServer} mobile={isMobile} />
-      </Shell>
-    );
-  } else if (effectiveScreen === 'profile') {
-    content = (
-      <Shell T={T} mobile={isMobile} active="profile" onNav={id => setScreen(id)} user={user}>
-        <ProfileWired T={T} user={user} onLogout={onLogout} mobile={isMobile} dark={dark} setDark={setDark} />
-      </Shell>
-    );
-  } else if (effectiveScreen === 'admin' && user && user.role === 'ADMIN') {
-    content = (
-      <Shell T={T} mobile={isMobile} active="admin" onNav={id => setScreen(id)} user={user}>
-        <AdminPageWired T={T} currentUser={user} mobile={isMobile} />
-      </Shell>
-    );
-  } else {
-    // Fallback
-    setScreen('dashboard');
-    content = null;
-  }
+  const content = renderScreenContent({
+    effectiveScreen, T, user, isMobile, currentMeal, dark, setDark, setScreen,
+    onAuth, onAnalyzed, onSaved, onLogout, openMealFromServer,
+  });
+  if (content === null) setScreen('dashboard');
 
   return (
     <div style={{

@@ -62,7 +62,7 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
         <div style={{ width: '100%', background: T.bgAlt, borderRadius: 18, padding: 18, fontFamily: 'JetBrains Mono,monospace', fontSize: 13, color: T.inkMuted }}>
           {['→ plat détecté', '→ ingrédients: 6/7', '→ portion estimée', '→ calories…']
             .slice(0, Math.min(4, Math.ceil(prog / 25)))
-            .map((l, i) => <div key={`line-${i}`} style={{ padding: '3px 0', opacity: 1, animation: 'rise .3s ease' }}>{l}</div>)
+            .map(l => <div key={l} style={{ padding: '3px 0', opacity: 1, animation: 'rise .3s ease' }}>{l}</div>)
           }
           <div style={{ height: 3, background: T.hairline, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
             <div style={{ width: `${prog}%`, height: '100%', background: T.accent, transition: 'width .3s' }} />
@@ -129,10 +129,13 @@ function Upload({ T, onCancel, onAnalyzed, mobile }) {
       {stage === 'idle' && (
         <>
           <div
+            role="button"
+            tabIndex={0}
             onDragOver={e => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={e => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
             onClick={() => fileRef.current.click()}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current.click(); } }}
             style={{ border: `2px dashed ${drag ? T.accent : T.hairline}`, borderRadius: 24, padding: mobile ? '34px 18px' : '52px 28px', textAlign: 'center', background: drag ? T.accentSoft : T.bgAlt, cursor: 'pointer', transition: 'all .2s', position: 'relative', overflow: 'hidden' }}
           >
             <svg viewBox="0 0 600 200" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: .4, pointerEvents: 'none' }}>
@@ -256,7 +259,8 @@ function History({ T, meals, onMeal, mobile }) {
   meals.forEach(m => {
     if (!m.date) return;
     const k = m.date.slice(0, 10);
-    (groups[k] = groups[k] || []).push(m);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(m);
   });
   const days = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 

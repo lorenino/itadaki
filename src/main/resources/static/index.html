@@ -55,46 +55,44 @@
   </div>
   <div id="root"></div>
 
-  <script>
+  <script type="module">
     /**
      * Chargement séquentiel des modules JSX via fetch + Babel.transform.
      * Garantit l'ordre d'exécution (chaque fichier peut utiliser les globals du précédent).
      * Pas de build step — Spring Boot sert static/ directement.
      */
-    (async function loadJSX() {
-      const files = [
-        'v2/tokens.jsx',
-        'v2/primitives.jsx',
-        'v2/screens.jsx',
-        'v2/screens2.jsx',
-        'v2/app.jsx',
-      ];
+    const files = [
+      'v2/tokens.jsx',
+      'v2/primitives.jsx',
+      'v2/screens.jsx',
+      'v2/screens2.jsx',
+      'v2/app.jsx',
+    ];
 
-      try {
-        for (const path of files) {
-          const res = await fetch(path);
-          if (!res.ok) throw new Error('HTTP ' + res.status + ' pour ' + path);
-          const src = await res.text();
-          const result = Babel.transform(src, { presets: ['react'], filename: path });
-          const code = result && result.code;
-          if (!code) throw new Error('Babel n\'a pas retourne de code pour ' + path);
-          // textContent => execution synchrone dans le scope global lors de l'insertion.
-          // Pas de Blob URL (cross-browser incoherent avec Babel Standalone).
-          const script = document.createElement('script');
-          script.setAttribute('data-source', path);
-          script.textContent = code + '\n//# sourceURL=' + path;
-          document.head.appendChild(script);
-        }
-        // Tout est chargé — cache le splash
-        document.getElementById('splash').style.display = 'none';
-      } catch (err) {
-        const splash = document.getElementById('splash');
-        splash.innerHTML = '<div style="color:oklch(0.55 0.18 25);font-family:Inter,system-ui;font-size:14px;padding:24px;max-width:500px;text-align:center">'
-          + '<strong>Erreur de chargement</strong><br><pre style="margin-top:12px;font-size:11px;text-align:left;white-space:pre-wrap">'
-          + err.message + '</pre></div>';
-        console.error('Itadaki boot error:', err);
+    try {
+      for (const path of files) {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' pour ' + path);
+        const src = await res.text();
+        const result = Babel.transform(src, { presets: ['react'], filename: path });
+        const code = result && result.code;
+        if (!code) throw new Error('Babel n\'a pas retourne de code pour ' + path);
+        // textContent => execution synchrone dans le scope global lors de l'insertion.
+        // Pas de Blob URL (cross-browser incoherent avec Babel Standalone).
+        const script = document.createElement('script');
+        script.dataset.source = path;
+        script.textContent = code + '\n//# sourceURL=' + path;
+        document.head.appendChild(script);
       }
-    })();
+      // Tout est chargé — cache le splash
+      document.getElementById('splash').style.display = 'none';
+    } catch (err) {
+      const splash = document.getElementById('splash');
+      splash.innerHTML = '<div style="color:oklch(0.55 0.18 25);font-family:Inter,system-ui;font-size:14px;padding:24px;max-width:500px;text-align:center">'
+        + '<strong>Erreur de chargement</strong><br><pre style="margin-top:12px;font-size:11px;text-align:left;white-space:pre-wrap">'
+        + err.message + '</pre></div>';
+      console.error('Itadaki boot error:', err);
+    }
   </script>
 </body>
 </html>

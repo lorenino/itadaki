@@ -7,9 +7,19 @@ function Dish({seed,style={},rounded=20,children}){
   </div>;
 }
 
+function btnPad(size){
+  if(size==='lg') return '16px 26px';
+  if(size==='sm') return '8px 14px';
+  return '12px 20px';
+}
+function btnFs(size){
+  if(size==='lg') return 16;
+  if(size==='sm') return 13;
+  return 14;
+}
 function Btn({children,onClick,variant='primary',T,style={},disabled,block,size='md',icon}){
-  const pad=size==='lg'?'16px 26px':size==='sm'?'8px 14px':'12px 20px';
-  const fs=size==='lg'?16:size==='sm'?13:14;
+  const pad=btnPad(size);
+  const fs=btnFs(size);
   const v={
     primary:{bg:T.accent,fg:'#fff',bd:'transparent',sh:`0 8px 20px -8px ${T.accent}`},
     dark:{bg:T.ink,fg:T.bg,bd:'transparent',sh:'none'},
@@ -32,9 +42,13 @@ function Btn({children,onClick,variant='primary',T,style={},disabled,block,size=
 
 function Field({label,value,onChange,type='text',placeholder,T,icon,hint,error}){
   const [f,setF]=useState(false);
+  let borderColor;
+  if(error) borderColor=T.danger;
+  else if(f) borderColor=T.accent;
+  else borderColor=T.hairline;
   return <label style={{display:'block',marginBottom:14}}>
     {label&&<div style={{fontFamily:'Inter,system-ui',fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.1em',color:T.inkMuted,marginBottom:7}}>{label}</div>}
-    <div style={{display:'flex',alignItems:'center',gap:10,padding:'13px 16px',background:T.surface,border:`1px solid ${error?T.danger:(f?T.accent:T.hairline)}`,borderRadius:14,transition:'border-color .15s',boxShadow:f?`0 0 0 3px ${T.accentSoft}`:'none'}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'13px 16px',background:T.surface,border:`1px solid ${borderColor}`,borderRadius:14,transition:'border-color .15s',boxShadow:f?`0 0 0 3px ${T.accentSoft}`:'none'}}>
       {icon&&<div style={{color:T.inkFaint,display:'flex'}}>{icon}</div>}
       <input type={type} value={value} onChange={e=>onChange(e.target.value)} onFocus={()=>setF(true)} onBlur={()=>setF(false)} placeholder={placeholder}
         style={{flex:1,border:'none',outline:'none',background:'transparent',fontFamily:'Inter,system-ui',fontSize:15,color:T.ink,padding:0}}/>
@@ -54,9 +68,19 @@ function Chip({children,T,variant='default',style={}}){
 }
 
 // Confidence as percentage + bar (only variant per spec)
+function confidenceColor(value,T){
+  if(value>=85) return T.matcha;
+  if(value>=65) return T.warn;
+  return T.danger;
+}
+function confidenceBg(value,T){
+  if(value>=85) return T.matchaSoft;
+  if(value>=65) return 'oklch(0.94 0.05 70)';
+  return 'oklch(0.94 0.04 25)';
+}
 function Confidence({value,T}){
-  const color=value>=85?T.matcha:value>=65?T.warn:T.danger;
-  const bg=value>=85?T.matchaSoft:value>=65?'oklch(0.94 0.05 70)':'oklch(0.94 0.04 25)';
+  const color=confidenceColor(value,T);
+  const bg=confidenceBg(value,T);
   return <div style={{display:'inline-flex',alignItems:'center',gap:10,padding:'6px 12px',background:bg,borderRadius:999,fontFamily:'JetBrains Mono,monospace',fontSize:12,fontWeight:600,color}}>
     <div style={{width:42,height:4,background:'rgba(0,0,0,.08)',borderRadius:2,overflow:'hidden'}}>
       <div style={{width:`${value}%`,height:'100%',background:color,transition:'width .6s ease'}}/>
