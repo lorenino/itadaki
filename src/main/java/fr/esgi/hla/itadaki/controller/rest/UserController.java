@@ -1,12 +1,12 @@
 package fr.esgi.hla.itadaki.controller.rest;
 
-import fr.esgi.hla.itadaki.annotation.CurrentUser;
 import fr.esgi.hla.itadaki.dto.user.UserResponseDto;
 import fr.esgi.hla.itadaki.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +26,7 @@ public class UserController {
 
     @GetMapping("/{id}")
     @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get user by ID")
     public UserResponseDto getUserById(@PathVariable Long id) {
         return userService.findById(id);
@@ -33,6 +34,7 @@ public class UserController {
 
     @GetMapping("/email/{email}")
     @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get user by email")
     public UserResponseDto getUserByEmail(@PathVariable String email) {
         return userService.findByEmail(email);

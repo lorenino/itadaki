@@ -97,7 +97,7 @@ function Shell({T,mobile,active,onNav,user,children,pad=true}){
   if(mobile){
     return <div style={{height:'100%',display:'flex',flexDirection:'column',background:T.bg,color:T.ink,overflow:'hidden'}}>
       <div style={{flex:1,overflowY:'auto',padding:pad?'16px 18px 12px':0}}>{children}</div>
-      {active&&<MobNav T={T} active={active} onNav={onNav}/>}
+      {active&&<MobNav T={T} active={active} onNav={onNav} user={user}/>}
     </div>;
   }
   return <div style={{height:'100%',display:'flex',background:T.bg,color:T.ink,overflow:'hidden'}}>
@@ -113,6 +113,9 @@ function SideNav({T,active,onNav,user}){
     {id:'history',l:'Historique',i:c=><svg width="18" height="18" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke={c} strokeWidth="1.7"/><path d="M7 9h8M7 13h8M7 16h5" stroke={c} strokeWidth="1.7" strokeLinecap="round"/></svg>},
     {id:'profile',l:'Profil',i:c=><svg width="18" height="18" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="3.5" stroke={c} strokeWidth="1.7"/><path d="M4 19c1-3.5 4-5 7-5s6 1.5 7 5" stroke={c} strokeWidth="1.7" strokeLinecap="round"/></svg>},
   ];
+  if(user&&user.role==='ADMIN'){
+    items.push({id:'admin',l:'Admin',i:c=><svg width="18" height="18" viewBox="0 0 22 22" fill="none"><path d="M11 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6l7-3z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/><path d="M8 11l2 2 4-4" stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>});
+  }
   return <div style={{width:210,flexShrink:0,background:T.bg,borderRight:`1px solid ${T.hairline}`,padding:'24px 14px',display:'flex',flexDirection:'column',gap:2}}>
     <div style={{display:'flex',alignItems:'center',gap:10,padding:'4px 8px 22px'}}>
       <div style={{width:36,height:36,borderRadius:'14px 14px 14px 6px',background:T.accent,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'"Fraunces",serif',fontSize:22,fontStyle:'italic',fontWeight:500,transform:'rotate(-4deg)'}}>i</div>
@@ -130,13 +133,14 @@ function SideNav({T,active,onNav,user}){
   </div>;
 }
 
-function MobNav({T,active,onNav}){
+function MobNav({T,active,onNav,user}){
   const items=[
     {id:'dashboard',l:'Accueil'},
     {id:'upload',l:'Analyser'},
     {id:'history',l:'Historique'},
     {id:'profile',l:'Profil'},
   ];
+  if(user&&user.role==='ADMIN') items.push({id:'admin',l:'Admin'});
   return <div style={{display:'flex',padding:'8px 10px 14px',background:T.bg,borderTop:`1px solid ${T.hairline}`,flexShrink:0}}>
     {items.map(t=>{const a=active===t.id;return <button key={t.id} onClick={()=>onNav(t.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3,padding:'8px 0',border:'none',background:'transparent',cursor:'pointer'}}>
       <div style={{width:5,height:5,borderRadius:'50%',background:a?T.accent:'transparent'}}/>

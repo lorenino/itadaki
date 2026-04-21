@@ -78,6 +78,15 @@ const API = {
       API.call('POST', '/api/corrections/' + mealId, { body: dto }),
     get: (mealId) => API.call('GET', '/api/corrections/' + mealId),
   },
+
+  admin: {
+    users: (page = 0, size = 20) => API.call('GET', `/api/admin/users?page=${page}&size=${size}`),
+    deleteUser: (id) => API.call('DELETE', '/api/admin/users/' + id),
+    setRole: (id, role) => API.call('PATCH', '/api/admin/users/' + id + '/role', { body: { role } }),
+    meals: (page = 0, size = 20) => API.call('GET', `/api/admin/meals?page=${page}&size=${size}`),
+    deleteMeal: (id) => API.call('DELETE', '/api/admin/meals/' + id),
+    stats: () => API.call('GET', '/api/admin/stats'),
+  },
 };
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────────
@@ -640,6 +649,19 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
   const [apiErr, setApiErr] = useState('');
   const [mealType, setMealType] = useState(() => meal.mealType || detectMealType(meal.date));
   const [typeErr, setTypeErr] = useState('');
+  // Correction manuelle persistante cote back (POST /api/corrections/{mealId})
+  const [savedCorrection, setSavedCorrection] = useState(null);
+  const [corrLd, setCorrLd] = useState(false);
+  const [corrMsg, setCorrMsg] = useState('');
+
+  // Charge la correction existante si le meal est deja status CORRECTED
+  useEffect(() => {
+    const mid = getMealId(meal);
+    if (!mid || String(mid).startsWith('new-')) return;
+    API.corrections.get(mid)
+      .then(c => { if (c && c.id) setSavedCorrection(c); })
+      .catch(() => { /* 404 = pas de correction, normal */ });
+  }, []);
 
   const saveMealType = async (newType) => {
     const mealId = getMealId(meal);
@@ -711,6 +733,42 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
       setApiErr('Erreur lors de la 2ᵉ passe : ' + (e.body || e.message || 'serveur indisponible'));
     } finally {
       setLd(false);
+    }
+  };
+
+  // Enregistre la correction manuelle de l'utilisateur (nom + items + kcal + commentaire)
+  // via POST /api/corrections/{mealId}. Le back passe le meal en status CORRECTED.
+  const saveCorrection = async () => {
+    const mealId = getMealId(meal);
+    if (!mealId) { setCorrMsg('ID du repas manquant'); return; }
+    const view = reanalyzed || meal;
+    // Reutilise les items du back si dispo, sinon reconstruit depuis les noms
+    const items = view.analysisRaw && view.analysisRaw.detectedItems && view.analysisRaw.detectedItems.length
+      ? view.analysisRaw.detectedItems.map(i => ({
+          name: i.name || String(i),
+          quantity: i.quantity ?? 1,
+          unit: i.unit || 'portion',
+          calories: i.calories ?? null,
+        }))
+      : (view.ing || []).map(n => ({ name: n, quantity: 1, unit: 'portion', calories: null }));
+    if (items.length === 0) items.push({ name: view.name || 'Repas', quantity: 1, unit: 'portion', calories: null });
+    const totalKcal = view.kMin != null && view.kMax != null ? (view.kMin + view.kMax) / 2 : null;
+    setCorrLd(true);
+    setCorrMsg('');
+    try {
+      const saved = await API.corrections.create(mealId, {
+        correctedDishName: view.name,
+        correctedItems: items,
+        correctedTotalCalories: totalKcal,
+        userComment: hint || null,
+      });
+      setSavedCorrection(saved);
+      setCorrMsg('Correction enregistrée.');
+    } catch (e) {
+      if (e.status === 409) setCorrMsg('Une correction existe deja pour ce repas.');
+      else setCorrMsg('Erreur : ' + (e.body || e.message || 'enregistrement impossible'));
+    } finally {
+      setCorrLd(false);
     }
   };
 
@@ -831,9 +889,19 @@ function CorrectionWired({ T, meal, onSave, onCancel, mobile }) {
               style={{ width: '100%', padding: '12px 14px', background: T.surface, border: '1px solid ' + T.hairline, borderRadius: 12, fontFamily: 'Inter,system-ui', fontSize: 14, color: T.ink, resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
             />
             {apiErr && <div style={{ fontSize: 12, color: T.danger, marginTop: 6, fontFamily: 'Inter,system-ui' }}>{apiErr}</div>}
-            <Btn T={T} variant="soft" onClick={doReanalyze} disabled={ld || !hint.trim()} style={{ marginTop: 10 }}>
-              {ld ? <><Spin size={13} color={T.accentDeep} /> 2ᵉ passe en cours…</> : 'Relancer l\'analyse'}
-            </Btn>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <Btn T={T} variant="soft" onClick={doReanalyze} disabled={ld || !hint.trim()}>
+                {ld ? <><Spin size={13} color={T.accentDeep} /> 2ᵉ passe en cours…</> : 'Relancer l\'analyse'}
+              </Btn>
+              <Btn T={T} variant="ghost" onClick={saveCorrection} disabled={corrLd || !!savedCorrection}>
+                {corrLd ? <><Spin size={13} /> Enregistrement…</> : (savedCorrection ? 'Correction enregistrée ✓' : 'Enregistrer ma correction')}
+              </Btn>
+            </div>
+            {corrMsg && (
+              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, marginTop: 8, color: savedCorrection ? T.accentDeep : T.danger }}>
+                {corrMsg}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 22, display: 'flex', gap: 10 }}>
@@ -853,6 +921,9 @@ function HistoryWired({ T, onMeal, mobile }) {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [filter, setFilter] = useState('all');
+  // Filtre par date (YYYY-MM-DD). Quand set, on appelle GET /api/history/date/{date}
+  // et la pagination "Charger plus" est desactivee.
+  const [dateFilter, setDateFilter] = useState('');
 
   const load = async (p = 0) => {
     setLoading(true);
@@ -869,7 +940,38 @@ function HistoryWired({ T, onMeal, mobile }) {
     }
   };
 
-  useEffect(() => { load(0); }, []);
+  const loadByDate = async (date) => {
+    setLoading(true);
+    try {
+      const list = await API.history.byDate(date);
+      const items = (list || []).map(h => toViewMeal(h, null));
+      setMeals(items);
+      setTotalPages(1);
+      setPage(0);
+    } catch (e) {
+      console.warn('History byDate error', e);
+      setMeals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (dateFilter) loadByDate(dateFilter);
+    else load(0);
+  }, [dateFilter]);
+
+  const handleDelete = async (m) => {
+    const mid = getMealId(m);
+    if (!mid) return;
+    if (!window.confirm('Supprimer ce repas ?')) return;
+    try {
+      await API.meals.del(mid);
+      setMeals(prev => prev.filter(x => getMealId(x) !== mid));
+    } catch (e) {
+      alert('Suppression impossible : ' + (e.body || e.message || 'erreur serveur'));
+    }
+  };
 
   const filtered = filter === 'all' ? meals : meals.filter(m => m.meal === filter);
 
@@ -897,11 +999,31 @@ function HistoryWired({ T, onMeal, mobile }) {
       </div>
       <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginBottom: 20 }}>{meals.length} repas enregistrés</div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
         {[{ id: 'all', l: 'Tout' }, { id: 'Petit-déj', l: 'Petit-déj' }, { id: 'Déjeuner', l: 'Déjeuner' }, { id: 'Dîner', l: 'Dîner' }].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             style={{ padding: '7px 14px', background: filter === f.id ? T.ink : T.bgAlt, color: filter === f.id ? T.bg : T.inkMuted, border: 'none', borderRadius: 999, fontFamily: 'Inter,system-ui', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{f.l}</button>
         ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M2 6h12M5.5 2v2M10.5 2v2" stroke="currentColor" strokeWidth="1.4"/></svg>
+          Filtrer par date
+        </label>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={e => setDateFilter(e.target.value)}
+          max={new Date().toISOString().slice(0, 10)}
+          style={{ padding: '6px 10px', background: T.bgAlt, border: '1px solid ' + T.hairline, borderRadius: 10, fontFamily: 'Inter,system-ui', fontSize: 12.5, color: T.ink, outline: 'none' }}
+        />
+        {dateFilter && (
+          <button onClick={() => setDateFilter('')}
+            style={{ padding: '6px 12px', background: T.accentSoft, color: T.accentDeep, border: 'none', borderRadius: 999, fontFamily: 'Inter,system-ui', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Effacer le filtre
+          </button>
+        )}
       </div>
 
       {loading && meals.length === 0 && (
@@ -925,7 +1047,18 @@ function HistoryWired({ T, onMeal, mobile }) {
               <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkMuted }}>{Math.round(total)} kcal</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 10 }}>
-              {dayMeals.map(m => <MealRow key={m.id} m={m} T={T} onClick={() => onMeal(m)} />)}
+              {dayMeals.map(m => (
+                <div key={m.id} style={{ position: 'relative' }}>
+                  <MealRow m={m} T={T} onClick={() => onMeal(m)} />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(m); }}
+                    title="Supprimer ce repas"
+                    style={{ position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', border: '1px solid ' + T.hairline, color: T.danger, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.08)' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.8 9a1 1 0 001 .9h2.4a1 1 0 001-.9L11 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         );
@@ -951,6 +1084,151 @@ function ProfileWired({ T, user, onLogout, mobile, dark, setDark }) {
   };
 
   return <Profile T={T} user={user} onLogout={handleLogout} mobile={mobile} dark={dark} setDark={setDark} />;
+}
+
+// ─── Admin câblé ─────────────────────────────────────────────────────────────
+// Panel reserve aux utilisateurs role=ADMIN (enforce cote back par @PreAuthorize).
+// Le tab "Admin" n'apparait dans SideNav/MobNav que si user.role==='ADMIN'.
+function AdminPageWired({ T, currentUser, mobile }) {
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState({ content: [], totalPages: 1 });
+  const [meals, setMeals] = useState({ content: [], totalPages: 1 });
+  const [usersPage, setUsersPage] = useState(0);
+  const [mealsPage, setMealsPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  const reloadStats = () => API.admin.stats().then(setStats).catch(() => setStats(null));
+  const reloadUsers = (p = usersPage) => API.admin.users(p, 10).then(r => { setUsers(r); setUsersPage(p); }).catch(e => setErr('Chargement users : ' + (e.body || e.message)));
+  const reloadMeals = (p = mealsPage) => API.admin.meals(p, 10).then(r => { setMeals(r); setMealsPage(p); }).catch(e => setErr('Chargement meals : ' + (e.body || e.message)));
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await Promise.all([reloadStats(), reloadUsers(0), reloadMeals(0)]);
+      setLoading(false);
+    })();
+  }, []);
+
+  const deleteUser = async (u) => {
+    if (currentUser && currentUser.id === u.id) { alert('Vous ne pouvez pas supprimer votre propre compte.'); return; }
+    if (!window.confirm(`Supprimer ${u.username} et tous ses repas ?`)) return;
+    try {
+      await API.admin.deleteUser(u.id);
+      await Promise.all([reloadUsers(), reloadMeals(), reloadStats()]);
+    } catch (e) { alert('Suppression impossible : ' + (e.body || e.message)); }
+  };
+
+  const toggleRole = async (u) => {
+    const next = u.role === 'ADMIN' ? 'USER' : 'ADMIN';
+    if (!window.confirm(`Changer le role de ${u.username} en ${next} ?`)) return;
+    try {
+      await API.admin.setRole(u.id, next);
+      await reloadUsers();
+    } catch (e) { alert('Changement impossible : ' + (e.body || e.message)); }
+  };
+
+  const deleteMeal = async (m) => {
+    if (!window.confirm(`Supprimer le repas #${m.id} de ${m.userName} ?`)) return;
+    try {
+      await API.admin.deleteMeal(m.id);
+      await Promise.all([reloadMeals(), reloadStats()]);
+    } catch (e) { alert('Suppression impossible : ' + (e.body || e.message)); }
+  };
+
+  if (loading) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.inkMuted, fontFamily: 'Inter,system-ui', fontSize: 14 }}>Chargement…</div>;
+  }
+
+  const statCard = (label, value, suffix) => (
+    <div style={{ flex: '1 1 160px', padding: 18, background: T.bgAlt, borderRadius: 18, border: '1px solid ' + T.hairline }}>
+      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: T.inkFaint }}>{label}</div>
+      <div style={{ fontFamily: '"Fraunces",serif', fontSize: 30, color: T.ink, letterSpacing: '-.02em', fontWeight: 500, marginTop: 4 }}>
+        {value}{suffix && <span style={{ fontSize: 14, color: T.inkMuted, marginLeft: 4, fontFamily: 'Inter,system-ui' }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ fontFamily: '"Fraunces",serif', fontSize: mobile ? 28 : 36, color: T.ink, letterSpacing: '-.03em', fontWeight: 500, marginBottom: 4 }}>
+        Panel <span style={{ fontStyle: 'italic', color: T.accent }}>Admin</span>
+      </div>
+      <div style={{ fontFamily: 'Inter,system-ui', fontSize: 13, color: T.inkMuted, marginBottom: 22 }}>
+        Supervision utilisateurs, moderation des repas, metriques globales.
+      </div>
+
+      {err && <div style={{ padding: '10px 14px', background: 'oklch(0.95 0.03 25)', border: '1px solid ' + T.danger, borderRadius: 12, fontFamily: 'Inter,system-ui', fontSize: 13, color: T.danger, marginBottom: 18 }}>{err}</div>}
+
+      {stats && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 28 }}>
+          {statCard('Utilisateurs', stats.totalUsers)}
+          {statCard('Repas', stats.totalMeals)}
+          {statCard('Analyses IA', stats.totalAnalyses)}
+          {statCard('Kcal moy. / repas', stats.avgCaloriesPerMeal != null ? Math.round(stats.avgCaloriesPerMeal) : '—', 'kcal')}
+        </div>
+      )}
+
+      {/* Users */}
+      <div style={{ marginBottom: 34 }}>
+        <div style={{ fontFamily: '"Fraunces",serif', fontSize: 22, color: T.ink, letterSpacing: '-.02em', fontWeight: 500, marginBottom: 12 }}>Utilisateurs</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(users.content || []).map(u => {
+            const isSelf = currentUser && currentUser.id === u.id;
+            return (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: T.surface, border: '1px solid ' + T.hairline, borderRadius: 14, flexWrap: 'wrap' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: T.accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"Fraunces",serif', fontSize: 16, fontStyle: 'italic' }}>{(u.username || '?')[0].toUpperCase()}</div>
+                <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 14, fontWeight: 600, color: T.ink }}>{u.username}{isSelf && <span style={{ marginLeft: 8, fontSize: 11, color: T.inkFaint, fontWeight: 500 }}>(vous)</span>}</div>
+                  <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted }}>{u.email}</div>
+                </div>
+                <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: u.role === 'ADMIN' ? T.accent : T.bgAlt, color: u.role === 'ADMIN' ? '#fff' : T.inkMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{u.role}</div>
+                <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkFaint }}>{u.mealCount} repas</div>
+                <Btn T={T} variant="ghost" onClick={() => toggleRole(u)} disabled={isSelf}>
+                  {u.role === 'ADMIN' ? 'Retrograder' : 'Promouvoir'}
+                </Btn>
+                <Btn T={T} variant="ghost" onClick={() => deleteUser(u)} disabled={isSelf}>
+                  Supprimer
+                </Btn>
+              </div>
+            );
+          })}
+        </div>
+        {users.totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+            <Btn T={T} variant="ghost" disabled={usersPage === 0} onClick={() => reloadUsers(usersPage - 1)}>← Précédent</Btn>
+            <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, alignSelf: 'center' }}>Page {usersPage + 1} / {users.totalPages}</div>
+            <Btn T={T} variant="ghost" disabled={usersPage + 1 >= users.totalPages} onClick={() => reloadUsers(usersPage + 1)}>Suivant →</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Meals */}
+      <div style={{ marginBottom: 34 }}>
+        <div style={{ fontFamily: '"Fraunces",serif', fontSize: 22, color: T.ink, letterSpacing: '-.02em', fontWeight: 500, marginBottom: 12 }}>Repas</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(meals.content || []).map(m => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: T.surface, border: '1px solid ' + T.hairline, borderRadius: 14, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkFaint }}>#{m.id}</div>
+              <div style={{ flex: '1 1 160px', fontFamily: 'Inter,system-ui', fontSize: 13, color: T.ink, fontWeight: 500 }}>{m.userName || 'inconnu'}</div>
+              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: T.bgAlt, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{m.mealType || '—'}</div>
+              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: m.status === 'ANALYSED' ? T.matchaSoft : T.bgAlt, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{m.status}</div>
+              <div style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: T.inkMuted }}>{m.calories != null ? Math.round(m.calories) + ' kcal' : '—'}</div>
+              <div style={{ fontFamily: 'Inter,system-ui', fontSize: 11, color: T.inkFaint }}>{m.uploadedAt ? new Date(m.uploadedAt).toLocaleDateString('fr-FR') : ''}</div>
+              <Btn T={T} variant="ghost" onClick={() => deleteMeal(m)}>Supprimer</Btn>
+            </div>
+          ))}
+        </div>
+        {meals.totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
+            <Btn T={T} variant="ghost" disabled={mealsPage === 0} onClick={() => reloadMeals(mealsPage - 1)}>← Précédent</Btn>
+            <div style={{ fontFamily: 'Inter,system-ui', fontSize: 12, color: T.inkMuted, alignSelf: 'center' }}>Page {mealsPage + 1} / {meals.totalPages}</div>
+            <Btn T={T} variant="ghost" disabled={mealsPage + 1 >= meals.totalPages} onClick={() => reloadMeals(mealsPage + 1)}>Suivant →</Btn>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── App principale — Router SPA ──────────────────────────────────────────────
@@ -1076,6 +1354,12 @@ function App() {
     content = (
       <Shell T={T} mobile={isMobile} active="profile" onNav={id => setScreen(id)} user={user}>
         <ProfileWired T={T} user={user} onLogout={onLogout} mobile={isMobile} dark={dark} setDark={setDark} />
+      </Shell>
+    );
+  } else if (effectiveScreen === 'admin' && user && user.role === 'ADMIN') {
+    content = (
+      <Shell T={T} mobile={isMobile} active="admin" onNav={id => setScreen(id)} user={user}>
+        <AdminPageWired T={T} currentUser={user} mobile={isMobile} />
       </Shell>
     );
   } else {
